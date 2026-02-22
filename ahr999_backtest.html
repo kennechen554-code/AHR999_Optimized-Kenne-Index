@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AHR999 策略回测对比</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0a0c0f;
+    --surface: #111318;
+    --surf2:   #181c23;
+    --border:  #1e2330;
+    --s1: #f59e0b;   /* 经典AHR999 - amber  */
+    --s2: #22d3ee;   /* 优化版      - cyan   */
+    --s3: #6b7280;   /* 无脑定投    - gray   */
+    --text:  #e2e8f0;
+    --muted: #64748b;
+    --green: #10b981;
+    --red:   #ef4444;
+    --btc:   #f7931a;
+    --eth:   #627eea;
+    --sol:   #9945ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Noto Sans SC',sans-serif; font-size:13px; }
+  .mono { font-family:'IBM Plex Mono',monospace; }
+
+  header {
+    border-bottom:1px solid var(--border);
+    padding:20px 32px;
+    display:flex; align-items:center; justify-content:space-between;
+    background:linear-gradient(180deg,#0d1117 0%,var(--bg) 100%);
+  }
+  .hdr-left h1 {
+    font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600;
+    letter-spacing:.15em; color:#fff; text-transform:uppercase;
+  }
+  .hdr-left p { color:var(--muted); font-size:11px; margin-top:4px; font-family:'IBM Plex Mono',monospace; letter-spacing:.05em; }
+  .legend { display:flex; gap:20px; align-items:center; }
+  .leg { display:flex; align-items:center; gap:7px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); }
+  .leg-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+
+  .tabs {
+    display:flex; padding:0 32px;
+    border-bottom:1px solid var(--border); background:var(--surface);
+  }
+  .tab {
+    padding:14px 28px; cursor:pointer;
+    font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500;
+    color:var(--muted); border-bottom:2px solid transparent; transition:all .2s; letter-spacing:.08em;
+  }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:#fff; border-bottom-color:var(--s2); }
+  .tab .cbadge { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+
+  main { padding:24px 32px; max-width:1400px; }
+  .coin-panel { display:none; }
+  .coin-panel.active { display:block; }
+
+  /* Score cards */
+  .score-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+  .sc {
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    padding:16px 20px; position:relative; overflow:hidden;
+  }
+  .sc::before { content:''; position:absolute; top:0;left:0;right:0; height:2px; }
+  .sc.s1::before { background:var(--s1); }
+  .sc.s2::before { background:var(--s2); }
+  .sc.s3::before { background:var(--s3); }
+  .sc .slabel { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:10px; }
+  .sc.s1 .slabel { color:var(--s1); }
+  .sc.s2 .slabel { color:var(--s2); }
+  .sc.s3 .slabel { color:var(--muted); }
+  .sc .roi { font-family:'IBM Plex Mono',monospace; font-size:28px; font-weight:600; color:#fff; margin-bottom:2px; }
+  .sc .roi-sub { font-size:10px; color:var(--muted); margin-bottom:14px; font-family:'IBM Plex Mono',monospace; }
+  .sc .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+  .sc .slb { font-size:10px; color:var(--muted); font-family:'IBM Plex Mono',monospace; display:block; margin-bottom:2px; }
+  .sc .svl { font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500; color:var(--text); }
+  .badge-best {
+    display:inline-block; padding:2px 7px;
+    background:rgba(34,211,238,.12); color:var(--s2);
+    border-radius:3px; font-size:9px; font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.1em; margin-left:6px; vertical-align:middle; text-transform:uppercase;
+  }
+  .badge-eff {
+    display:inline-block; padding:2px 7px;
+    background:rgba(245,158,11,.12); color:var(--s1);
+    border-radius:3px; font-size:9px; font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.1em; margin-left:6px; vertical-align:middle; text-transform:uppercase;
+  }
+
+  /* Chart */
+  .chart-wrap { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:20px; margin-bottom:20px; }
+  .chart-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .chart-title { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+  .chart-sub { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); margin-top:3px; }
+  .tog { display:flex; gap:4px; }
+  .tbtn {
+    padding:4px 12px; border-radius:3px; border:1px solid var(--border);
+    background:transparent; color:var(--muted);
+    font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer; transition:all .15s; letter-spacing:.08em;
+  }
+  .tbtn.active, .tbtn:hover { background:var(--surf2); color:var(--text); border-color:#2d3748; }
+  .chart-box { position:relative; height:320px; }
+
+  /* Metrics table */
+  .mt { background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:20px; }
+  .mt table { width:100%; border-collapse:collapse; }
+  .mt thead tr { background:var(--surf2); border-bottom:1px solid var(--border); }
+  .mt th { padding:10px 16px; text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+  .mt th:not(:first-child) { text-align:right; }
+  .mt td { padding:11px 16px; font-family:'IBM Plex Mono',monospace; font-size:12px; border-bottom:1px solid var(--border); color:var(--text); }
+  .mt td:not(:first-child) { text-align:right; }
+  .mt tr:last-child td { border-bottom:none; }
+  .mt .rlabel { color:var(--muted); font-size:11px; }
+  .hs1 { color:var(--s1)!important; font-weight:600; }
+  .hs2 { color:var(--s2)!important; font-weight:600; }
+  .vpos { color:var(--green)!important; }
+  .vneg { color:var(--red)!important; }
+
+  /* Insight cards */
+  .insights { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .ic { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px 20px; }
+  .ic h3 { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+  .ic p { color:#94a3b8; line-height:1.7; font-size:12px; }
+  .ic p strong { color:var(--text); }
+  .tag { display:inline-block; padding:1px 6px; border-radius:2px; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:600; margin:0 2px; }
+  .ta { background:rgba(245,158,11,.15); color:var(--s1); }
+  .tc { background:rgba(34,211,238,.12); color:var(--s2); }
+  .tg { background:rgba(100,116,139,.15); color:#94a3b8; }
+
+  /* Drawdown bars */
+  .dd { display:flex; flex-direction:column; gap:10px; }
+  .dd-row { display:flex; align-items:center; gap:10px; }
+  .dd-lbl { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); width:120px; flex-shrink:0; }
+  .dd-bw { flex:1; background:var(--surf2); border-radius:2px; height:8px; overflow:hidden; }
+  .dd-b { height:100%; border-radius:2px; transition:width 1s ease; }
+  .dd-v { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--red); width:52px; text-align:right; }
+
+  footer {
+    border-top:1px solid var(--border); padding:14px 32px; color:var(--muted);
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em;
+    display:flex; justify-content:space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left">
+    <h1>AHR999 策略回测对比</h1>
+    <p>每周定投 $100 ｜ 数据截至 2026-02-23 ｜ BTC / ETH / SOL</p>
+  </div>
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:var(--s1)"></div>经典 AHR999</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--s2)"></div>AHR999 优化版</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--s3)"></div>无脑定投</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchCoin('BTC',this)">
+    <span class="cbadge" style="background:var(--btc)"></span>BTC
+  </div>
+  <div class="tab" onclick="switchCoin('ETH',this)">
+    <span class="cbadge" style="background:var(--eth)"></span>ETH
+  </div>
+  <div class="tab" onclick="switchCoin('SOL',this)">
+    <span class="cbadge" style="background:var(--sol)"></span>SOL
+  </div>
+</div>
+
+<main id="main-content"></main>
+
+<footer>
+  <span>回测基于历史数据，不构成投资建议 ｜ 每周定投 $100，AHR999 经典版 vs 优化版 vs 无脑定投</span>
+  <span>BACKTEST ENGINE · WEEKLY DCA · $100/WEEK</span>
+</footer>
+
+<script>
+const RAW    = {"BTC": {"period": "2018-07-23 ~ 2026-02-23", "years": 1.1, "finalPrice": 67582.95, "s1": {"roi": 412.3, "cagr": 23.9, "mdd": -73.3, "spent": 34200, "val": 175207, "calmar": 0.33, "label": "经典 AHR999"}, "s2": {"roi": 525.1, "cagr": 27.1, "mdd": -74.1, "spent": 28355, "val": 177257, "calmar": 0.37, "label": "AHR999 优化版"}, "s3": {"roi": 314.6, "cagr": 20.5, "mdd": -74.2, "spent": 39700, "val": 164613, "calmar": 0.28, "label": "无脑定投"}}, "ETH": {"period": "2018-03-05 ~ 2026-02-23", "years": 1.1, "finalPrice": 1963.95, "s1": {"roi": 584.8, "cagr": 27.1, "mdd": -77.0, "spent": 33900, "val": 232149, "calmar": 0.35, "label": "经典 AHR999"}, "s2": {"roi": 583.8, "cagr": 27.1, "mdd": -77.0, "spent": 32525, "val": 222391, "calmar": 0.35, "label": "AHR999 优化版"}, "s3": {"roi": 277.6, "cagr": 18.0, "mdd": -76.7, "spent": 41700, "val": 157445, "calmar": 0.23, "label": "无脑定投"}}, "SOL": {"period": "2021-03-01 ~ 2026-02-23", "years": 0.7, "finalPrice": 84.33, "s1": {"roi": 178.6, "cagr": 22.6, "mdd": -63.2, "spent": 21000, "val": 58497, "calmar": 0.36, "label": "经典 AHR999"}, "s2": {"roi": 180.0, "cagr": 22.8, "mdd": -63.2, "spent": 19365, "val": 54215, "calmar": 0.36, "label": "AHR999 优化版"}, "s3": {"roi": 77.8, "cagr": 12.1, "mdd": -90.0, "spent": 26100, "val": 46399, "calmar": 0.13, "label": "无脑定投"}}};
+const TS_DATA = {"BTC": [{"date": "2018-07-23", "val1": 0.0, "pnl1": 0.0, "val2": 100.0, "pnl2": 0.0, "val3": 100.0, "pnl3": 0.0}, {"date": "2018-08-06", "val1": 0.0, "pnl1": 0.0, "val2": 129.82, "pnl2": -7.27, "val3": 274.66, "pnl3": -8.45}, {"date": "2018-08-20", "val1": 200.14, "pnl1": 0.07, "val2": 317.22, "pnl2": -6.7, "val3": 447.86, "pnl3": -10.43}, {"date": "2018-09-03", "val1": 232.39, "pnl1": 16.2, "val2": 573.49, "pnl2": 6.2, "val3": 725.18, "pnl3": 3.6}, {"date": "2018-09-17", "val1": 398.94, "pnl1": -0.27, "val2": 692.39, "pnl2": -6.43, "val3": 822.9, "pnl3": -8.57}, {"date": "2018-10-01", "val1": 622.57, "pnl1": 3.76, "val2": 933.06, "pnl2": -0.74, "val3": 1071.15, "pnl3": -2.62}, {"date": "2018-10-15", "val1": 837.02, "pnl1": 4.63, "val2": 1154.14, "pnl2": 1.24, "val3": 1295.17, "pnl3": -0.37}, {"date": "2018-10-29", "val1": 982.85, "pnl1": -1.71, "val2": 1280.81, "pnl2": -4.42, "val3": 1413.32, "pnl3": -5.78}, {"date": "2018-11-12", "val1": 1199.42, "pnl1": -0.05, "val2": 1502.48, "pnl2": -2.44, "val3": 1637.26, "pnl3": -3.69}, {"date": "2018-11-26", "val1": 996.52, "pnl1": -33.57, "val2": 1080.71, "pnl2": -37.53, "val3": 1158.57, "pnl3": -39.02}, {"date": "2018-12-10", "val1": 1262.52, "pnl1": -33.55, "val2": 1337.34, "pnl2": -37.21, "val3": 1218.17, "pnl3": -41.99}, {"date": "2018-12-24", "val1": 1902.47, "pnl1": -17.28, "val2": 1989.83, "pnl2": -21.35, "val3": 1636.47, "pnl3": -28.85}, {"date": "2019-01-07", "val1": 2301.74, "pnl1": -14.75, "val2": 2388.39, "pnl2": -18.48, "val3": 1830.54, "pnl3": -26.78}, {"date": "2019-01-21", "val1": 2436.56, "pnl1": -21.4, "val2": 2513.44, "pnl2": -24.52, "val3": 1821.26, "pnl3": -32.55}, {"date": "2019-02-04", "val1": 2794.26, "pnl1": -20.16, "val2": 2869.75, "pnl2": -23.06, "val3": 1989.23, "pnl3": -31.41}, {"date": "2019-02-18", "val1": 3460.28, "pnl1": -8.94, "val2": 3645.26, "pnl2": -11.74, "val3": 2446.67, "pnl3": -21.08}, {"date": "2019-03-04", "val1": 3691.7, "pnl1": -12.1, "val2": 3867.98, "pnl2": -14.61, "val3": 2528.69, "pnl3": -23.37}, {"date": "2019-03-18", "val1": 4165.49, "pnl1": -5.33, "val2": 4557.7, "pnl2": -7.55, "val3": 2917.17, "pnl3": -16.65}, {"date": "2019-04-01", "val1": 4534.51, "pnl1": -1.42, "val2": 5047.44, "pnl2": -3.49, "val3": 3237.13, "pnl3": -12.51}, {"date": "2019-04-15", "val1": 5693.69, "pnl1": 18.62, "val2": 6315.57, "pnl2": 16.31, "val3": 4120.72, "pnl3": 5.66}, {"date": "2019-04-29", "val1": 6133.03, "pnl1": 22.66, "val2": 6781.3, "pnl2": 20.45, "val3": 4493.32, "pnl3": 9.59}, {"date": "2019-05-13", "val1": 9257.23, "pnl1": 81.51, "val2": 10221.4, "pnl2": 78.38, "val3": 6918.48, "pnl3": 60.89}, {"date": "2019-05-27", "val1": 10404.61, "pnl1": 104.01, "val2": 11488.27, "pnl2": 100.49, "val3": 7986.29, "pnl3": 77.47}, {"date": "2019-06-10", "val1": 9485.42, "pnl1": 85.99, "val2": 10473.35, "pnl2": 82.78, "val3": 7479.11, "pnl3": 59.13}, {"date": "2019-06-24", "val1": 13137.88, "pnl1": 157.61, "val2": 14506.22, "pnl2": 153.16, "val3": 10577.73, "pnl3": 115.87}, {"date": "2019-07-08", "val1": 14542.39, "pnl1": 185.14, "val2": 16057.02, "pnl2": 180.23, "val3": 11923.73, "pnl3": 133.8}, {"date": "2019-07-22", "val1": 12286.77, "pnl1": 140.92, "val2": 13566.47, "pnl2": 136.76, "val3": 10269.68, "pnl3": 93.77}, {"date": "2019-08-05", "val1": 14055.45, "pnl1": 175.6, "val2": 15519.36, "pnl2": 170.84, "val3": 11972.42, "pnl3": 117.68}, {"date": "2019-08-19", "val1": 12970.28, "pnl1": 154.32, "val2": 14321.17, "pnl2": 149.93, "val3": 11243.85, "pnl3": 97.26}, {"date": "2019-09-02", "val1": 12286.4, "pnl1": 140.91, "val2": 13566.06, "pnl2": 136.75, "val3": 10850.69, "pnl3": 83.91}, {"date": "2019-09-16", "val1": 12181.01, "pnl1": 138.84, "val2": 13449.7, "pnl2": 134.72, "val3": 10957.12, "pnl3": 79.62}, {"date": "2019-09-30", "val1": 9949.72, "pnl1": 91.34, "val2": 11061.03, "pnl2": 86.53, "val3": 9045.5, "pnl3": 43.58}, {"date": "2019-10-14", "val1": 10222.3, "pnl1": 89.3, "val2": 11341.51, "pnl2": 85.02, "val3": 9311.66, "pnl3": 43.26}, {"date": "2019-10-28", "val1": 11483.91, "pnl1": 105.07, "val2": 12718.0, "pnl2": 100.92, "val3": 10479.8, "pnl3": 56.41}, {"date": "2019-11-11", "val1": 11088.2, "pnl1": 91.18, "val2": 12259.03, "pnl2": 87.73, "val3": 10135.56, "pnl3": 46.89}, {"date": "2019-11-25", "val1": 9213.51, "pnl1": 53.56, "val2": 10166.66, "pnl2": 51.06, "val3": 8437.98, "pnl3": 18.84}, {"date": "2019-12-09", "val1": 9710.98, "pnl1": 56.63, "val2": 10694.83, "pnl2": 54.33, "val3": 8910.46, "pnl3": 22.06}, {"date": "2019-12-23", "val1": 9888.63, "pnl1": 54.51, "val2": 10975.77, "pnl2": 51.81, "val3": 9090.47, "pnl3": 21.21}, {"date": "2020-01-06", "val1": 10691.56, "pnl1": 61.99, "val2": 11844.21, "pnl2": 59.41, "val3": 9845.3, "pnl3": 27.86}, {"date": "2020-01-20", "val1": 12116.88, "pnl1": 78.19, "val2": 13400.92, "pnl2": 75.63, "val3": 11174.15, "pnl3": 41.44}, {"date": "2020-02-03", "val1": 13232.36, "pnl1": 89.03, "val2": 14612.96, "pnl2": 86.63, "val3": 12218.74, "pnl3": 50.85}, {"date": "2020-02-17", "val1": 14020.09, "pnl1": 94.72, "val2": 15462.16, "pnl2": 92.55, "val3": 12961.33, "pnl3": 56.16}, {"date": "2020-03-02", "val1": 13070.18, "pnl1": 76.62, "val2": 14394.76, "pnl2": 74.91, "val3": 12097.68, "pnl3": 42.33}, {"date": "2020-03-16", "val1": 7636.14, "pnl1": -0.83, "val2": 8333.32, "pnl2": -1.73, "val3": 6987.56, "pnl3": -19.68}, {"date": "2020-03-30", "val1": 10107.16, "pnl1": 24.78, "val2": 10993.63, "pnl2": 23.8, "val3": 9083.62, "pnl3": 2.06}, {"date": "2020-04-13", "val1": 11001.5, "pnl1": 32.55, "val2": 12049.46, "pnl2": 31.26, "val3": 9906.97, "pnl3": 8.87}, {"date": "2020-04-27", "val1": 12722.46, "pnl1": 49.68, "val2": 14027.86, "pnl2": 47.97, "val3": 11477.99, "pnl3": 23.42}, {"date": "2020-05-11", "val1": 14206.65, "pnl1": 63.29, "val2": 15644.17, "pnl2": 61.61, "val3": 12836.22, "pnl3": 35.12}, {"date": "2020-05-25", "val1": 14960.33, "pnl1": 68.09, "val2": 16454.74, "pnl2": 66.55, "val3": 13535.66, "pnl3": 39.54}, {"date": "2020-06-08", "val1": 16638.18, "pnl1": 82.84, "val2": 18280.63, "pnl2": 81.36, "val3": 15072.39, "pnl3": 52.25}, {"date": "2020-06-22", "val1": 16677.1, "pnl1": 79.32, "val2": 18303.38, "pnl2": 78.05, "val3": 15126.73, "pnl3": 49.77}, {"date": "2020-07-06", "val1": 16290.76, "pnl1": 71.48, "val2": 17859.7, "pnl2": 70.42, "val3": 14795.05, "pnl3": 43.64}, {"date": "2020-07-20", "val1": 16170.1, "pnl1": 66.7, "val2": 17708.25, "pnl2": 65.81, "val3": 14703.75, "pnl3": 40.04}, {"date": "2020-08-03", "val1": 20006.31, "pnl1": 102.08, "val2": 21890.18, "pnl2": 101.2, "val3": 18210.37, "pnl3": 70.19}, {"date": "2020-08-17", "val1": 22102.04, "pnl1": 118.83, "val2": 24164.11, "pnl2": 118.09, "val3": 20136.22, "pnl3": 84.74}, {"date": "2020-08-31", "val1": 21164.49, "pnl1": 105.48, "val2": 23120.5, "pnl2": 104.97, "val3": 19299.77, "pnl3": 73.87}, {"date": "2020-09-14", "val1": 19591.03, "pnl1": 86.58, "val2": 21382.88, "pnl2": 86.26, "val3": 17882.82, "pnl3": 58.26}, {"date": "2020-09-28", "val1": 19838.41, "pnl1": 85.41, "val2": 21634.35, "pnl2": 85.23, "val3": 18126.3, "pnl3": 57.62}, {"date": "2020-10-12", "val1": 21588.61, "pnl1": 98.06, "val2": 23524.26, "pnl2": 98.02, "val3": 19743.3, "pnl3": 68.75}, {"date": "2020-10-26", "val1": 24653.52, "pnl1": 122.1, "val2": 26845.05, "pnl2": 122.23, "val3": 22564.27, "pnl3": 89.62}, {"date": "2020-11-09", "val1": 29066.06, "pnl1": 159.52, "val2": 31639.79, "pnl2": 159.77, "val3": 26712.47, "pnl3": 120.76}, {"date": "2020-11-23", "val1": 34829.8, "pnl1": 210.98, "val2": 37913.88, "pnl2": 211.28, "val3": 32219.39, "pnl3": 161.95}, {"date": "2020-12-07", "val1": 36344.69, "pnl1": 224.51, "val2": 39562.92, "pnl2": 224.82, "val3": 33818.06, "pnl3": 170.54}, {"date": "2020-12-21", "val1": 43081.61, "pnl1": 284.66, "val2": 46896.37, "pnl2": 285.03, "val3": 40304.52, "pnl3": 217.36}, {"date": "2021-01-04", "val1": 60657.69, "pnl1": 441.59, "val2": 66028.76, "pnl2": 442.11, "val3": 56965.75, "pnl3": 341.59}, {"date": "2021-01-18", "val1": 69461.01, "pnl1": 520.19, "val2": 75611.59, "pnl2": 520.78, "val3": 65436.73, "pnl3": 399.52}, {"date": "2021-02-01", "val1": 63573.43, "pnl1": 467.62, "val2": 69202.69, "pnl2": 468.17, "val3": 60094.2, "pnl3": 351.84}, {"date": "2021-02-15", "val1": 90850.07, "pnl1": 711.16, "val2": 98894.6, "pnl2": 711.94, "val3": 86081.35, "pnl3": 537.64}, {"date": "2021-03-01", "val1": 94028.0, "pnl1": 739.54, "val2": 102353.93, "pnl2": 740.34, "val3": 89284.16, "pnl3": 551.71}, {"date": "2021-03-15", "val1": 105439.79, "pnl1": 841.43, "val2": 114776.2, "pnl2": 842.33, "val3": 100326.37, "pnl3": 621.77}, {"date": "2021-03-29", "val1": 109289.63, "pnl1": 875.8, "val2": 118966.93, "pnl2": 876.74, "val3": 104196.08, "pnl3": 638.98}, {"date": "2021-04-12", "val1": 113507.83, "pnl1": 913.46, "val2": 123558.64, "pnl2": 914.44, "val3": 108418.92, "pnl3": 658.17}, {"date": "2021-04-26", "val1": 102398.61, "pnl1": 814.27, "val2": 111465.73, "pnl2": 815.15, "val3": 98004.83, "pnl3": 575.9}, {"date": "2021-05-10", "val1": 105839.77, "pnl1": 845.0, "val2": 115211.6, "pnl2": 845.91, "val3": 101495.97, "pnl3": 590.45}, {"date": "2021-05-24", "val1": 73566.37, "pnl1": 556.84, "val2": 80080.47, "pnl2": 557.48, "val3": 70736.21, "pnl3": 374.74}, {"date": "2021-06-07", "val1": 63623.53, "pnl1": 468.07, "val2": 69257.22, "pnl2": 468.61, "val3": 61365.95, "pnl3": 306.4}, {"date": "2021-06-21", "val1": 60037.54, "pnl1": 431.31, "val2": 65284.85, "pnl2": 434.25, "val3": 57988.77, "pnl3": 279.01}, {"date": "2021-07-05", "val1": 64090.56, "pnl1": 462.2, "val2": 69583.36, "pnl2": 469.42, "val3": 62004.56, "pnl3": 300.03}, {"date": "2021-07-19", "val1": 58861.13, "pnl1": 407.42, "val2": 63889.19, "pnl2": 414.41, "val3": 56951.62, "pnl3": 262.75}, {"date": "2021-08-02", "val1": 74718.25, "pnl1": 544.12, "val2": 81100.87, "pnl2": 552.99, "val3": 72499.46, "pnl3": 355.97}, {"date": "2021-08-16", "val1": 87608.05, "pnl1": 655.24, "val2": 95091.75, "pnl2": 665.63, "val3": 85205.73, "pnl3": 429.23}, {"date": "2021-08-30", "val1": 89672.45, "pnl1": 673.04, "val2": 97332.49, "pnl2": 683.68, "val3": 87408.45, "pnl3": 436.25}, {"date": "2021-09-13", "val1": 85774.71, "pnl1": 639.44, "val2": 93101.8, "pnl2": 649.61, "val3": 83794.46, "pnl3": 407.85}, {"date": "2021-09-27", "val1": 80443.21, "pnl1": 593.48, "val2": 87314.87, "pnl2": 603.02, "val3": 78784.03, "pnl3": 371.76}, {"date": "2021-10-11", "val1": 109690.88, "pnl1": 845.61, "val2": 119060.95, "pnl2": 858.62, "val3": 107645.2, "pnl3": 536.95}, {"date": "2021-10-25", "val1": 120393.33, "pnl1": 937.87, "val2": 130677.62, "pnl2": 952.15, "val3": 118349.77, "pnl3": 592.1}, {"date": "2021-11-08", "val1": 128881.05, "pnl1": 1011.04, "val2": 139890.39, "pnl2": 1026.33, "val3": 126904.28, "pnl3": 633.55}, {"date": "2021-11-22", "val1": 107354.41, "pnl1": 825.47, "val2": 116524.89, "pnl2": 838.2, "val3": 105896.25, "pnl3": 505.12}, {"date": "2021-12-06", "val1": 96274.38, "pnl1": 729.95, "val2": 104498.38, "pnl2": 741.37, "val3": 95154.02, "pnl3": 437.59}, {"date": "2021-12-20", "val1": 89541.23, "pnl1": 671.91, "val2": 97190.07, "pnl2": 682.53, "val3": 88699.68, "pnl3": 395.53}, {"date": "2022-01-03", "val1": 88647.89, "pnl1": 664.21, "val2": 96220.41, "pnl2": 674.72, "val3": 88006.34, "pnl3": 386.22}, {"date": "2022-01-17", "val1": 80546.79, "pnl1": 594.37, "val2": 87427.3, "pnl2": 603.92, "val3": 80164.78, "pnl3": 338.06}, {"date": "2022-01-31", "val1": 73623.57, "pnl1": 523.93, "val2": 79895.17, "pnl2": 533.08, "val3": 73275.36, "pnl3": 296.08}, {"date": "2022-02-14", "val1": 81411.49, "pnl1": 589.93, "val2": 88346.5, "pnl2": 600.05, "val3": 81223.47, "pnl3": 334.35}, {"date": "2022-02-28", "val1": 82722.53, "pnl1": 595.15, "val2": 89759.29, "pnl2": 605.65, "val3": 82631.75, "pnl3": 337.21}, {"date": "2022-03-14", "val1": 76240.48, "pnl1": 530.09, "val2": 82708.46, "pnl2": 540.16, "val3": 76157.05, "pnl3": 298.73}, {"date": "2022-03-28", "val1": 90674.44, "pnl1": 643.23, "val2": 98242.27, "pnl2": 660.39, "val3": 90675.33, "pnl3": 369.82}, {"date": "2022-04-11", "val1": 76166.07, "pnl1": 519.24, "val2": 82454.66, "pnl2": 536.22, "val3": 76251.69, "pnl3": 291.03}, {"date": "2022-04-25", "val1": 78090.83, "pnl1": 524.73, "val2": 84422.82, "pnl2": 546.42, "val3": 78178.38, "pnl3": 296.84}, {"date": "2022-05-09", "val1": 58276.31, "pnl1": 358.87, "val2": 62927.2, "pnl2": 376.72, "val3": 58341.44, "pnl3": 193.17}, {"date": "2022-05-23", "val1": 56599.76, "pnl1": 338.76, "val2": 61101.09, "pnl2": 355.98, "val3": 56662.8, "pnl3": 181.9}, {"date": "2022-06-06", "val1": 61200.64, "pnl1": 367.18, "val2": 66052.06, "pnl2": 385.68, "val3": 61268.59, "pnl3": 201.82}, {"date": "2022-06-20", "val1": 40517.21, "pnl1": 200.13, "val2": 43538.9, "pnl2": 214.81, "val3": 40370.28, "pnl3": 96.93}, {"date": "2022-07-04", "val1": 40248.31, "pnl1": 189.56, "val2": 43220.47, "pnl2": 203.73, "val3": 39906.22, "pnl3": 92.78}, {"date": "2022-07-18", "val1": 45040.36, "pnl1": 214.97, "val2": 48235.03, "pnl2": 231.97, "val3": 44448.79, "pnl3": 112.67}, {"date": "2022-08-01", "val1": 47136.11, "pnl1": 220.65, "val2": 50349.75, "pnl2": 239.51, "val3": 46313.32, "pnl3": 119.49}, {"date": "2022-08-15", "val1": 49012.25, "pnl1": 228.94, "val2": 52340.09, "pnl2": 248.24, "val3": 48160.23, "pnl3": 126.1}, {"date": "2022-08-29", "val1": 41653.61, "pnl1": 172.25, "val2": 44360.57, "pnl2": 189.37, "val3": 40741.49, "pnl3": 89.5}, {"date": "2022-09-12", "val1": 46412.45, "pnl1": 195.62, "val2": 49300.97, "pnl2": 215.43, "val3": 45192.32, "pnl3": 108.26}, {"date": "2022-09-26", "val1": 40244.15, "pnl1": 149.96, "val2": 42724.09, "pnl2": 166.53, "val3": 38998.2, "pnl3": 78.07}, {"date": "2022-10-10", "val1": 40438.26, "pnl1": 145.08, "val2": 42905.82, "pnl2": 161.14, "val3": 39001.06, "pnl3": 76.48}, {"date": "2022-10-24", "val1": 41254.2, "pnl1": 144.11, "val2": 43747.27, "pnl2": 159.94, "val3": 39603.26, "pnl3": 77.59}, {"date": "2022-11-07", "val1": 44347.33, "pnl1": 156.34, "val2": 46802.6, "pnl2": 174.82, "val3": 42388.16, "pnl3": 88.39}, {"date": "2022-11-21", "val1": 34378.24, "pnl1": 94.23, "val2": 36212.51, "pnl2": 108.36, "val3": 32681.75, "pnl3": 43.97}, {"date": "2022-12-05", "val1": 37369.09, "pnl1": 106.46, "val2": 39341.1, "pnl2": 121.27, "val3": 35340.56, "pnl3": 54.33}, {"date": "2022-12-19", "val1": 36598.35, "pnl1": 97.83, "val2": 38509.06, "pnl2": 111.82, "val3": 34437.37, "pnl3": 49.08}, {"date": "2023-01-02", "val1": 37516.38, "pnl1": 98.5, "val2": 39454.28, "pnl2": 112.35, "val3": 35126.1, "pnl3": 50.76}, {"date": "2023-01-16", "val1": 48017.45, "pnl1": 150.09, "val2": 50479.87, "pnl2": 167.37, "val3": 44856.87, "pnl3": 90.88}, {"date": "2023-01-30", "val1": 51935.26, "pnl1": 167.71, "val2": 54588.36, "pnl2": 186.1, "val3": 48529.94, "pnl3": 104.77}, {"date": "2023-02-13", "val1": 49736.94, "pnl1": 153.76, "val2": 52267.75, "pnl2": 171.1, "val3": 46488.59, "pnl3": 94.51}, {"date": "2023-02-27", "val1": 53856.1, "pnl1": 172.0, "val2": 56586.61, "pnl2": 190.49, "val3": 50351.43, "pnl3": 108.93}, {"date": "2023-03-13", "val1": 55488.25, "pnl1": 177.44, "val2": 58290.98, "pnl2": 196.19, "val3": 51890.88, "pnl3": 113.54}, {"date": "2023-03-27", "val1": 62615.81, "pnl1": 209.98, "val2": 65768.56, "pnl2": 230.83, "val3": 58569.18, "pnl3": 139.06}, {"date": "2023-04-10", "val1": 68622.17, "pnl1": 236.38, "val2": 72066.95, "pnl2": 258.9, "val3": 64200.73, "pnl3": 159.92}, {"date": "2023-04-24", "val1": 63892.17, "pnl1": 210.16, "val2": 67089.79, "pnl2": 230.82, "val3": 59787.95, "pnl3": 140.11}, {"date": "2023-05-08", "val1": 64457.37, "pnl1": 209.89, "val2": 67673.33, "pnl2": 230.44, "val3": 60329.6, "pnl3": 140.36}, {"date": "2023-05-22", "val1": 62747.05, "pnl1": 198.8, "val2": 65867.77, "pnl2": 218.51, "val3": 58741.55, "pnl3": 132.18}, {"date": "2023-06-05", "val1": 60319.86, "pnl1": 184.53, "val2": 63310.27, "pnl2": 203.21, "val3": 56481.6, "pnl3": 121.5}, {"date": "2023-06-19", "val1": 63140.3, "pnl1": 195.05, "val2": 66260.45, "pnl2": 214.33, "val3": 59135.53, "pnl3": 130.1}, {"date": "2023-07-03", "val1": 73485.09, "pnl1": 240.21, "val2": 77106.41, "pnl2": 262.34, "val3": 68837.06, "pnl3": 165.78}, {"date": "2023-07-17", "val1": 71282.67, "pnl1": 226.98, "val2": 74785.63, "pnl2": 248.16, "val3": 66786.53, "pnl3": 155.89}, {"date": "2023-07-31", "val1": 69340.57, "pnl1": 215.18, "val2": 72738.26, "pnl2": 235.51, "val3": 64979.56, "pnl3": 147.07}, {"date": "2023-08-14", "val1": 70012.6, "pnl1": 215.37, "val2": 73433.39, "pnl2": 235.62, "val3": 65621.95, "pnl3": 147.63}, {"date": "2023-08-28", "val1": 62536.25, "pnl1": 176.71, "val2": 65372.23, "pnl2": 196.07, "val3": 58439.56, "pnl3": 118.87}, {"date": "2023-09-11", "val1": 60638.72, "pnl1": 163.65, "val2": 63173.31, "pnl2": 183.54, "val3": 56494.78, "pnl3": 110.02}, {"date": "2023-09-25", "val1": 63788.09, "pnl1": 172.6, "val2": 66239.45, "pnl2": 194.66, "val3": 59257.73, "pnl3": 118.66}, {"date": "2023-10-09", "val1": 67305.61, "pnl1": 182.8, "val2": 69676.4, "pnl2": 207.22, "val3": 62353.54, "pnl3": 128.4}, {"date": "2023-10-23", "val1": 80889.68, "pnl1": 237.04, "val2": 83731.35, "pnl2": 265.96, "val3": 74954.05, "pnl3": 172.56}, {"date": "2023-11-06", "val1": 85924.91, "pnl1": 255.06, "val2": 88936.39, "pnl2": 285.34, "val3": 79634.6, "pnl3": 187.49}, {"date": "2023-11-20", "val1": 92018.45, "pnl1": 277.12, "val2": 95236.39, "pnl2": 309.09, "val3": 85296.89, "pnl3": 205.72}, {"date": "2023-12-04", "val1": 103392.51, "pnl1": 320.29, "val2": 107000.76, "pnl2": 355.71, "val3": 95855.66, "pnl3": 241.12}, {"date": "2023-12-18", "val1": 105237.49, "pnl1": 324.34, "val2": 108903.04, "pnl2": 359.89, "val3": 97580.98, "pnl3": 244.81}, {"date": "2024-01-01", "val1": 109193.06, "pnl1": 336.77, "val2": 112989.37, "pnl2": 373.15, "val3": 101263.41, "pnl3": 255.31}, {"date": "2024-01-15", "val1": 105259.91, "pnl1": 317.7, "val2": 108822.3, "pnl2": 353.8, "val3": 97629.72, "pnl3": 240.17}, {"date": "2024-01-29", "val1": 107429.39, "pnl1": 322.95, "val2": 111058.12, "pnl2": 359.3, "val3": 99657.12, "pnl3": 244.83}, {"date": "2024-02-12", "val1": 124056.31, "pnl1": 384.59, "val2": 128139.34, "pnl2": 427.76, "val3": 115096.82, "pnl3": 295.52}, {"date": "2024-02-26", "val1": 135592.23, "pnl1": 425.55, "val2": 139842.96, "pnl2": 475.96, "val3": 125814.42, "pnl3": 329.4}, {"date": "2024-03-11", "val1": 179402.78, "pnl1": 595.36, "val2": 185026.95, "pnl2": 662.05, "val3": 166671.32, "pnl3": 464.99}, {"date": "2024-03-25", "val1": 173931.73, "pnl1": 574.15, "val2": 179384.37, "pnl2": 638.82, "val3": 161791.88, "pnl3": 444.75}, {"date": "2024-04-08", "val1": 178262.57, "pnl1": 590.94, "val2": 183850.99, "pnl2": 657.21, "val3": 166023.28, "pnl3": 455.26}, {"date": "2024-04-22", "val1": 166313.65, "pnl1": 544.63, "val2": 171527.48, "pnl2": 606.46, "val3": 155100.12, "pnl3": 415.28}, {"date": "2024-05-06", "val1": 157417.4, "pnl1": 505.45, "val2": 162147.2, "pnl2": 567.82, "val3": 146817.1, "pnl3": 384.54}, {"date": "2024-05-20", "val1": 178169.52, "pnl1": 582.64, "val2": 183405.91, "pnl2": 655.38, "val3": 166279.44, "pnl3": 445.18}, {"date": "2024-06-03", "val1": 171793.32, "pnl1": 553.21, "val2": 176637.36, "pnl2": 627.5, "val3": 160342.04, "pnl3": 422.29}, {"date": "2024-06-17", "val1": 166232.78, "pnl1": 527.29, "val2": 170718.89, "pnl2": 603.13, "val3": 155165.19, "pnl3": 402.15}, {"date": "2024-07-01", "val1": 157427.77, "pnl1": 489.62, "val2": 161670.75, "pnl2": 560.42, "val3": 146960.01, "pnl3": 372.54}, {"date": "2024-07-15", "val1": 162207.43, "pnl1": 503.0, "val2": 166573.45, "pnl2": 574.93, "val3": 151436.1, "pnl3": 383.82}, {"date": "2024-07-29", "val1": 167570.34, "pnl1": 518.34, "val2": 171876.46, "pnl2": 596.42, "val3": 156456.09, "pnl3": 396.69}, {"date": "2024-08-12", "val1": 149117.29, "pnl1": 446.22, "val2": 152916.36, "pnl2": 515.23, "val3": 139240.88, "pnl3": 339.25}, {"date": "2024-08-26", "val1": 158085.52, "pnl1": 474.86, "val2": 162107.83, "pnl2": 547.01, "val3": 147628.74, "pnl3": 362.79}, {"date": "2024-09-09", "val1": 143709.76, "pnl1": 418.81, "val2": 147361.29, "pnl2": 483.49, "val3": 134216.88, "pnl3": 318.12}, {"date": "2024-09-23", "val1": 159785.51, "pnl1": 472.71, "val2": 163840.22, "pnl2": 543.65, "val3": 149244.53, "pnl3": 362.06}, {"date": "2024-10-07", "val1": 157168.5, "pnl1": 459.32, "val2": 161151.77, "pnl2": 528.15, "val3": 146813.24, "pnl3": 351.73}, {"date": "2024-10-21", "val1": 170387.43, "pnl1": 502.08, "val2": 174700.59, "pnl2": 575.69, "val3": 159174.53, "pnl3": 386.77}, {"date": "2024-11-04", "val1": 171779.31, "pnl1": 502.73, "val2": 176122.73, "pnl2": 575.97, "val3": 160487.78, "pnl3": 387.8}, {"date": "2024-11-18", "val1": 229032.5, "pnl1": 703.62, "val2": 234823.55, "pnl2": 801.26, "val3": 214179.6, "pnl3": 547.07}, {"date": "2024-12-02", "val1": 242644.56, "pnl1": 751.38, "val2": 248779.79, "pnl2": 854.83, "val3": 227111.95, "pnl3": 582.02}, {"date": "2024-12-16", "val1": 268514.09, "pnl1": 842.15, "val2": 275303.43, "pnl2": 956.62, "val3": 251534.5, "pnl3": 650.85}, {"date": "2024-12-30", "val1": 234926.34, "pnl1": 724.3, "val2": 240866.42, "pnl2": 824.45, "val3": 220268.49, "pnl3": 553.62}, {"date": "2025-01-13", "val1": 239341.84, "pnl1": 739.8, "val2": 245393.56, "pnl2": 841.83, "val3": 224600.96, "pnl3": 562.54}, {"date": "2025-01-27", "val1": 258448.28, "pnl1": 806.84, "val2": 264983.11, "pnl2": 917.01, "val3": 242730.47, "pnl3": 611.82}, {"date": "2025-02-10", "val1": 246670.55, "pnl1": 765.51, "val2": 252907.58, "pnl2": 870.67, "val3": 231865.17, "pnl3": 575.99}, {"date": "2025-02-24", "val1": 231984.66, "pnl1": 708.31, "val2": 237649.82, "pnl2": 812.11, "val3": 218072.48, "pnl3": 532.09}, {"date": "2025-03-10", "val1": 199344.19, "pnl1": 589.77, "val2": 204116.44, "pnl2": 680.41, "val3": 187400.93, "pnl3": 440.06}, {"date": "2025-03-24", "val1": 222127.42, "pnl1": 663.32, "val2": 227340.2, "pnl2": 765.89, "val3": 208831.38, "pnl3": 498.37}, {"date": "2025-04-07", "val1": 201163.85, "pnl1": 586.57, "val2": 205880.07, "pnl2": 678.23, "val3": 189134.37, "pnl3": 438.84}, {"date": "2025-04-21", "val1": 222593.32, "pnl1": 654.55, "val2": 227807.17, "pnl2": 754.65, "val3": 209294.53, "pnl3": 492.9}, {"date": "2025-05-05", "val1": 241150.26, "pnl1": 711.95, "val2": 246594.4, "pnl2": 825.13, "val3": 226754.73, "pnl3": 538.75}, {"date": "2025-05-19", "val1": 268946.99, "pnl1": 799.49, "val2": 274811.37, "pnl2": 930.99, "val3": 252904.23, "pnl3": 608.42}, {"date": "2025-06-02", "val1": 269867.84, "pnl1": 796.57, "val2": 275551.28, "pnl2": 933.77, "val3": 253781.89, "pnl3": 606.91}, {"date": "2025-06-16", "val1": 272452.26, "pnl1": 799.18, "val2": 277989.12, "pnl2": 942.92, "val3": 256223.98, "pnl3": 609.76}, {"date": "2025-06-30", "val1": 273551.92, "pnl1": 796.89, "val2": 278905.31, "pnl2": 946.35, "val3": 257270.16, "pnl3": 608.73}, {"date": "2025-07-14", "val1": 306072.95, "pnl1": 900.24, "val2": 311949.92, "pnl2": 1070.32, "val3": 287962.13, "pnl3": 688.94}, {"date": "2025-07-28", "val1": 301730.34, "pnl1": 879.64, "val2": 307319.49, "pnl2": 1052.95, "val3": 283888.35, "pnl3": 673.54}, {"date": "2025-08-11", "val1": 303527.43, "pnl1": 879.12, "val2": 308942.95, "pnl2": 1059.04, "val3": 285591.19, "pnl3": 673.96}, {"date": "2025-08-25", "val1": 281794.98, "pnl1": 803.19, "val2": 286624.54, "pnl2": 975.31, "val3": 265154.47, "pnl3": 614.7}, {"date": "2025-09-08", "val1": 286996.26, "pnl1": 814.0, "val2": 291708.9, "pnl2": 994.39, "val3": 270060.57, "pnl3": 624.02}, {"date": "2025-09-22", "val1": 288694.04, "pnl1": 813.59, "val2": 293233.65, "pnl2": 1000.11, "val3": 271669.83, "pnl3": 624.45}, {"date": "2025-10-06", "val1": 319675.19, "pnl1": 905.27, "val2": 324489.64, "pnl2": 1117.37, "val3": 300836.36, "pnl3": 697.97}, {"date": "2025-10-20", "val1": 283645.21, "pnl1": 786.39, "val2": 287718.1, "pnl2": 979.42, "val3": 266941.21, "pnl3": 604.33}, {"date": "2025-11-03", "val1": 273704.64, "pnl1": 750.01, "val2": 277538.61, "pnl2": 937.33, "val3": 257597.44, "pnl3": 576.11}, {"date": "2025-11-17", "val1": 236994.94, "pnl1": 631.47, "val2": 240312.07, "pnl2": 791.53, "val3": 223059.07, "pnl3": 482.4}, {"date": "2025-12-01", "val1": 221954.67, "pnl1": 580.84, "val2": 225058.52, "pnl2": 728.79, "val3": 208914.82, "pnl3": 442.64}, {"date": "2025-12-15", "val1": 222525.77, "pnl1": 578.43, "val2": 225634.87, "pnl2": 724.84, "val3": 209463.85, "pnl3": 441.25}, {"date": "2025-12-29", "val1": 224796.87, "pnl1": 581.2, "val2": 227934.93, "pnl2": 727.2, "val3": 211613.29, "pnl3": 443.99}, {"date": "2026-01-12", "val1": 235453.74, "pnl1": 609.2, "val2": 238737.82, "pnl2": 760.16, "val3": 221656.75, "pnl3": 466.9}, {"date": "2026-01-26", "val1": 228043.31, "pnl1": 582.76, "val2": 231221.3, "pnl2": 727.12, "val3": 214691.99, "pnl3": 446.29}, {"date": "2026-02-09", "val1": 181419.81, "pnl1": 436.75, "val2": 183753.71, "pnl2": 552.65, "val3": 170631.24, "pnl3": 331.98}, {"date": "2026-02-23", "val1": 175207.09, "pnl1": 412.3, "val2": 177257.87, "pnl2": 525.14, "val3": 164613.43, "pnl3": 314.64}], "ETH": [{"date": "2018-03-05", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 100.0, "pnl3": 0.0}, {"date": "2018-03-19", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 245.41, "pnl3": -18.2}, {"date": "2018-04-02", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 349.08, "pnl3": -30.18}, {"date": "2018-04-16", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 691.72, "pnl3": -1.18}, {"date": "2018-04-30", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1111.18, "pnl3": 23.46}, {"date": "2018-05-14", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1401.8, "pnl3": 27.44}, {"date": "2018-05-28", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1159.03, "pnl3": -10.84}, {"date": "2018-06-11", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1394.74, "pnl3": -7.02}, {"date": "2018-06-25", "val1": 100.0, "pnl1": 0.0, "val2": 100.0, "pnl2": 0.0, "val3": 1391.83, "pnl3": -18.13}, {"date": "2018-07-09", "val1": 102.84, "pnl1": 2.84, "val2": 102.84, "pnl2": 2.84, "val3": 1630.35, "pnl3": -14.19}, {"date": "2018-07-23", "val1": 198.11, "pnl1": -0.94, "val2": 198.11, "pnl2": -0.94, "val3": 1749.55, "pnl3": -16.69}, {"date": "2018-08-06", "val1": 278.41, "pnl1": -7.2, "val2": 278.41, "pnl2": -7.2, "val3": 1764.34, "pnl3": -23.29}, {"date": "2018-08-20", "val1": 381.14, "pnl1": -23.77, "val2": 298.95, "pnl2": -27.96, "val3": 1372.95, "pnl3": -45.08}, {"date": "2018-09-03", "val1": 607.8, "pnl1": -13.17, "val2": 519.96, "pnl2": -15.45, "val3": 1667.73, "pnl3": -38.23}, {"date": "2018-09-17", "val1": 811.41, "pnl1": -26.24, "val2": 652.07, "pnl2": -28.74, "val3": 1331.12, "pnl3": -54.1}, {"date": "2018-10-01", "val1": 1361.16, "pnl1": -9.26, "val2": 1173.02, "pnl2": -10.8, "val3": 1773.24, "pnl3": -42.8}, {"date": "2018-10-15", "val1": 1646.38, "pnl1": -13.35, "val2": 1472.22, "pnl2": -14.16, "val3": 1834.61, "pnl3": -44.41}, {"date": "2018-10-29", "val1": 1903.13, "pnl1": -17.26, "val2": 1743.14, "pnl2": -17.58, "val3": 1880.76, "pnl3": -46.26}, {"date": "2018-11-12", "val1": 2459.17, "pnl1": -8.92, "val2": 2286.24, "pnl2": -9.1, "val3": 2233.93, "pnl3": -39.62}, {"date": "2018-11-26", "val1": 1625.29, "pnl1": -47.57, "val2": 1397.31, "pnl2": -49.1, "val3": 1334.79, "pnl3": -65.77}, {"date": "2018-12-10", "val1": 1685.63, "pnl1": -51.84, "val2": 1409.1, "pnl2": -53.72, "val3": 1266.98, "pnl3": -69.1}, {"date": "2018-12-24", "val1": 3081.39, "pnl1": -20.99, "val2": 2656.87, "pnl2": -22.88, "val3": 2191.88, "pnl3": -49.03}, {"date": "2019-01-07", "val1": 3761.1, "pnl1": -12.53, "val2": 3301.79, "pnl2": -14.13, "val3": 2585.08, "pnl3": -42.55}, {"date": "2019-01-21", "val1": 3294.29, "pnl1": -29.91, "val2": 2938.65, "pnl2": -30.77, "val3": 2192.65, "pnl3": -53.35}, {"date": "2019-02-04", "val1": 3471.92, "pnl1": -31.92, "val2": 3140.74, "pnl2": -32.38, "val3": 2243.96, "pnl3": -54.2}, {"date": "2019-02-18", "val1": 5138.51, "pnl1": -6.57, "val2": 4690.42, "pnl2": -7.03, "val3": 3256.57, "pnl3": -36.15}, {"date": "2019-03-04", "val1": 4813.97, "pnl1": -18.41, "val2": 4427.51, "pnl2": -18.69, "val3": 2999.76, "pnl3": -43.4}, {"date": "2019-03-18", "val1": 5678.84, "pnl1": -9.86, "val2": 5255.66, "pnl2": -10.08, "val3": 3488.52, "pnl3": -36.57}, {"date": "2019-04-01", "val1": 6240.32, "pnl1": -6.86, "val2": 5805.92, "pnl2": -7.03, "val3": 3786.48, "pnl3": -33.57}, {"date": "2019-04-15", "val1": 7356.47, "pnl1": 5.09, "val2": 6864.53, "pnl2": 4.88, "val3": 4477.57, "pnl3": -24.11}, {"date": "2019-04-29", "val1": 7424.83, "pnl1": 1.71, "val2": 6947.77, "pnl2": 1.5, "val3": 4533.05, "pnl3": -25.69}, {"date": "2019-05-13", "val1": 9587.71, "pnl1": 27.84, "val2": 8985.37, "pnl2": 27.54, "val3": 5936.57, "pnl3": -5.77}, {"date": "2019-05-27", "val1": 13452.34, "pnl1": 74.71, "val2": 12620.29, "pnl2": 74.19, "val3": 8408.73, "pnl3": 29.37}, {"date": "2019-06-10", "val1": 12456.57, "pnl1": 57.68, "val2": 11698.39, "pnl2": 57.13, "val3": 7860.77, "pnl3": 17.32}, {"date": "2019-06-24", "val1": 15861.78, "pnl1": 98.27, "val2": 14903.29, "pnl2": 97.53, "val3": 10151.74, "pnl3": 47.13}, {"date": "2019-07-08", "val1": 15984.31, "pnl1": 97.34, "val2": 15024.8, "pnl2": 96.53, "val3": 10368.22, "pnl3": 46.03}, {"date": "2019-07-22", "val1": 11339.81, "pnl1": 36.62, "val2": 10622.0, "pnl2": 36.27, "val3": 7424.19, "pnl3": 1.7}, {"date": "2019-08-05", "val1": 12386.26, "pnl1": 45.72, "val2": 11615.55, "pnl2": 45.29, "val3": 8182.07, "pnl3": 9.09}, {"date": "2019-08-19", "val1": 11024.01, "pnl1": 25.27, "val2": 10356.46, "pnl2": 24.85, "val3": 7282.56, "pnl3": -5.42}, {"date": "2019-09-02", "val1": 10092.25, "pnl1": 9.7, "val2": 9504.66, "pnl2": 9.31, "val3": 6604.59, "pnl3": -16.4}, {"date": "2019-09-16", "val1": 11597.32, "pnl1": 20.81, "val2": 10946.47, "pnl2": 20.36, "val3": 7524.93, "pnl3": -7.1}, {"date": "2019-09-30", "val1": 11014.39, "pnl1": 10.14, "val2": 10417.56, "pnl2": 9.72, "val3": 7090.17, "pnl3": -14.58}, {"date": "2019-10-14", "val1": 11779.53, "pnl1": 13.26, "val2": 11163.33, "pnl2": 12.82, "val3": 7524.13, "pnl3": -11.48}, {"date": "2019-10-28", "val1": 11873.0, "pnl1": 9.94, "val2": 11273.3, "pnl2": 9.5, "val3": 7527.09, "pnl3": -13.48}, {"date": "2019-11-11", "val1": 12485.21, "pnl1": 11.48, "val2": 11874.75, "pnl2": 11.03, "val3": 7861.73, "pnl3": -11.67}, {"date": "2019-11-25", "val1": 10196.85, "pnl1": -12.1, "val2": 9666.05, "pnl2": -12.48, "val3": 6373.65, "pnl3": -29.96}, {"date": "2019-12-09", "val1": 10713.42, "pnl1": -10.72, "val2": 10176.47, "pnl2": -11.08, "val3": 6646.73, "pnl3": -28.53}, {"date": "2019-12-23", "val1": 9682.67, "pnl1": -21.91, "val2": 9217.06, "pnl2": -22.19, "val3": 5959.97, "pnl3": -37.26}, {"date": "2020-01-06", "val1": 11340.51, "pnl1": -11.4, "val2": 10815.32, "pnl2": -11.68, "val3": 6932.0, "pnl3": -28.54}, {"date": "2020-01-20", "val1": 13560.37, "pnl1": 2.73, "val2": 12952.41, "pnl2": 2.43, "val3": 8240.8, "pnl3": -16.76}, {"date": "2020-02-03", "val1": 15837.85, "pnl1": 16.45, "val2": 15146.75, "pnl2": 16.11, "val3": 9579.28, "pnl3": -5.16}, {"date": "2020-02-17", "val1": 22583.86, "pnl1": 63.65, "val2": 21608.0, "pnl2": 63.14, "val3": 13746.51, "pnl3": 33.46}, {"date": "2020-03-02", "val1": 19745.99, "pnl1": 41.04, "val2": 18900.85, "pnl2": 40.58, "val3": 12092.45, "pnl3": 15.17}, {"date": "2020-03-16", "val1": 9759.84, "pnl1": -32.22, "val2": 9305.36, "pnl2": -32.55, "val3": 5942.14, "pnl3": -44.47}, {"date": "2020-03-30", "val1": 12003.8, "pnl1": -18.89, "val2": 11414.61, "pnl2": -19.3, "val3": 7265.43, "pnl3": -33.34}, {"date": "2020-04-13", "val1": 14588.68, "pnl1": -4.02, "val2": 13891.39, "pnl2": -4.49, "val3": 8789.7, "pnl3": -20.81}, {"date": "2020-04-27", "val1": 18757.81, "pnl1": 20.24, "val2": 17881.83, "pnl2": 19.65, "val3": 11257.46, "pnl3": -0.38}, {"date": "2020-05-11", "val1": 18124.06, "pnl1": 13.28, "val2": 17295.42, "pnl2": 12.71, "val3": 10839.07, "pnl3": -5.75}, {"date": "2020-05-25", "val1": 20311.52, "pnl1": 23.85, "val2": 19400.7, "pnl2": 23.22, "val3": 12109.04, "pnl3": 3.5}, {"date": "2020-06-08", "val1": 24714.37, "pnl1": 48.88, "val2": 23615.05, "pnl2": 48.1, "val3": 14814.34, "pnl3": 24.49}, {"date": "2020-06-22", "val1": 24797.01, "pnl1": 45.86, "val2": 23712.28, "pnl2": 45.07, "val3": 14823.05, "pnl3": 22.5}, {"date": "2020-07-06", "val1": 25052.96, "pnl1": 43.98, "val2": 23975.05, "pnl2": 43.18, "val3": 14935.77, "pnl3": 21.43}, {"date": "2020-07-20", "val1": 24870.39, "pnl1": 39.72, "val2": 23817.42, "pnl2": 38.92, "val3": 14788.73, "pnl3": 18.31}, {"date": "2020-08-03", "val1": 40889.67, "pnl1": 127.16, "val2": 39167.78, "pnl2": 125.82, "val3": 24403.45, "pnl3": 92.15}, {"date": "2020-08-17", "val1": 45861.01, "pnl1": 151.98, "val2": 43938.58, "pnl2": 150.43, "val3": 27454.66, "pnl3": 112.83}, {"date": "2020-08-31", "val1": 46376.07, "pnl1": 152.04, "val2": 44440.7, "pnl2": 150.44, "val3": 27845.84, "pnl3": 112.56}, {"date": "2020-09-14", "val1": 40524.19, "pnl1": 117.87, "val2": 38814.99, "pnl2": 116.6, "val3": 24414.73, "pnl3": 83.57}, {"date": "2020-09-28", "val1": 38239.48, "pnl1": 103.4, "val2": 36635.25, "pnl2": 102.18, "val3": 23119.35, "pnl3": 71.25}, {"date": "2020-10-12", "val1": 41965.27, "pnl1": 120.87, "val2": 40213.51, "pnl2": 119.51, "val3": 25454.7, "pnl3": 85.8}, {"date": "2020-10-26", "val1": 42821.29, "pnl1": 123.03, "val2": 41042.29, "pnl2": 121.61, "val3": 26053.99, "pnl3": 87.44}, {"date": "2020-11-09", "val1": 48688.33, "pnl1": 150.97, "val2": 46674.56, "pnl2": 149.33, "val3": 29708.28, "pnl3": 110.7}, {"date": "2020-11-23", "val1": 66819.98, "pnl1": 242.67, "val2": 64061.75, "pnl2": 240.39, "val3": 40923.23, "pnl3": 186.18}, {"date": "2020-12-07", "val1": 65020.5, "pnl1": 231.74, "val2": 62340.68, "pnl2": 229.5, "val3": 39955.8, "pnl3": 175.56}, {"date": "2020-12-21", "val1": 67016.58, "pnl1": 238.47, "val2": 64262.87, "pnl2": 236.1, "val3": 41260.9, "pnl3": 180.69}, {"date": "2021-01-04", "val1": 114870.59, "pnl1": 480.15, "val2": 110150.57, "pnl2": 476.1, "val3": 70966.34, "pnl3": 376.28}, {"date": "2021-01-18", "val1": 138808.08, "pnl1": 601.05, "val2": 133104.46, "pnl2": 596.15, "val3": 85970.55, "pnl3": 469.34}, {"date": "2021-02-01", "val1": 151572.09, "pnl1": 665.52, "val2": 145344.0, "pnl2": 660.17, "val3": 94080.19, "pnl3": 514.9}, {"date": "2021-02-15", "val1": 196252.75, "pnl1": 891.18, "val2": 188188.74, "pnl2": 884.25, "val3": 122014.96, "pnl3": 687.19}, {"date": "2021-03-01", "val1": 173156.86, "pnl1": 774.53, "val2": 166041.86, "pnl2": 768.42, "val3": 107844.01, "pnl3": 586.9}, {"date": "2021-03-15", "val1": 197822.33, "pnl1": 899.1, "val2": 189693.82, "pnl2": 892.12, "val3": 123403.78, "pnl3": 676.12}, {"date": "2021-03-29", "val1": 200387.92, "pnl1": 912.06, "val2": 192154.0, "pnl2": 904.99, "val3": 125212.3, "pnl3": 677.72}, {"date": "2021-04-12", "val1": 235788.97, "pnl1": 1090.85, "val2": 226100.43, "pnl2": 1082.53, "val3": 147534.07, "pnl3": 805.12}, {"date": "2021-04-26", "val1": 279347.87, "pnl1": 1310.85, "val2": 267869.49, "pnl2": 1300.99, "val3": 175006.23, "pnl3": 960.64}, {"date": "2021-05-10", "val1": 435233.83, "pnl1": 2098.15, "val2": 417350.11, "pnl2": 2082.79, "val3": 272880.87, "pnl3": 1534.02}, {"date": "2021-05-24", "val1": 292124.02, "pnl1": 1375.37, "val2": 280120.67, "pnl2": 1365.07, "val3": 183335.24, "pnl3": 984.82}, {"date": "2021-06-07", "val1": 285905.26, "pnl1": 1343.97, "val2": 274157.44, "pnl2": 1333.88, "val3": 179628.16, "pnl3": 950.46}, {"date": "2021-06-21", "val1": 207971.11, "pnl1": 950.36, "val2": 199425.59, "pnl2": 943.02, "val3": 130836.86, "pnl3": 656.28}, {"date": "2021-07-05", "val1": 242279.08, "pnl1": 1123.63, "val2": 232323.85, "pnl2": 1115.08, "val3": 152625.75, "pnl3": 772.15}, {"date": "2021-07-19", "val1": 200607.42, "pnl1": 913.17, "val2": 192364.48, "pnl2": 906.09, "val3": 126563.87, "pnl3": 615.05}, {"date": "2021-08-02", "val1": 287546.53, "pnl1": 1352.26, "val2": 275731.27, "pnl2": 1342.11, "val3": 181631.03, "pnl3": 914.7}, {"date": "2021-08-16", "val1": 347064.86, "pnl1": 1652.85, "val2": 332804.0, "pnl2": 1640.61, "val3": 219425.81, "pnl3": 1112.3}, {"date": "2021-08-30", "val1": 356231.96, "pnl1": 1699.15, "val2": 341594.42, "pnl2": 1686.58, "val3": 225418.79, "pnl3": 1131.8}, {"date": "2021-09-13", "val1": 362376.82, "pnl1": 1730.19, "val2": 347486.79, "pnl2": 1717.4, "val3": 229490.84, "pnl3": 1140.49}, {"date": "2021-09-27", "val1": 322695.0, "pnl1": 1529.77, "val2": 309435.49, "pnl2": 1518.39, "val3": 204558.87, "pnl3": 993.9}, {"date": "2021-10-11", "val1": 390698.77, "pnl1": 1873.23, "val2": 374644.99, "pnl2": 1859.44, "val3": 247871.59, "pnl3": 1211.49}, {"date": "2021-10-25", "val1": 465510.3, "pnl1": 2251.06, "val2": 446382.52, "pnl2": 2234.64, "val3": 295547.08, "pnl3": 1447.37}, {"date": "2021-11-08", "val1": 530324.17, "pnl1": 2578.4, "val2": 508533.2, "pnl2": 2559.69, "val3": 336907.96, "pnl3": 1645.64}, {"date": "2021-11-22", "val1": 450685.87, "pnl1": 2176.19, "val2": 432167.23, "pnl2": 2160.29, "val3": 286504.33, "pnl3": 1369.25}, {"date": "2021-12-06", "val1": 479542.77, "pnl1": 2321.93, "val2": 459838.4, "pnl2": 2305.01, "val3": 305046.69, "pnl3": 1448.46}, {"date": "2021-12-20", "val1": 435106.98, "pnl1": 2097.51, "val2": 417228.47, "pnl2": 2082.16, "val3": 276984.51, "pnl3": 1291.88}, {"date": "2022-01-03", "val1": 415380.78, "pnl1": 1997.88, "val2": 398312.82, "pnl2": 1983.23, "val3": 264620.29, "pnl3": 1216.52}, {"date": "2022-01-17", "val1": 354029.26, "pnl1": 1688.03, "val2": 339482.22, "pnl2": 1675.53, "val3": 225740.13, "pnl3": 1012.02}, {"date": "2022-01-31", "val1": 296371.7, "pnl1": 1396.83, "val2": 284193.82, "pnl2": 1386.37, "val3": 189186.03, "pnl3": 822.86}, {"date": "2022-02-14", "val1": 323153.85, "pnl1": 1532.09, "val2": 309875.48, "pnl2": 1520.69, "val3": 206475.46, "pnl3": 897.47}, {"date": "2022-02-28", "val1": 322183.2, "pnl1": 1527.19, "val2": 308944.72, "pnl2": 1515.82, "val3": 206069.02, "pnl3": 885.98}, {"date": "2022-03-14", "val1": 285614.06, "pnl1": 1342.5, "val2": 273878.21, "pnl2": 1332.42, "val3": 182883.27, "pnl3": 766.75}, {"date": "2022-03-28", "val1": 367623.83, "pnl1": 1756.69, "val2": 352518.2, "pnl2": 1743.71, "val3": 235610.77, "pnl3": 1006.15}, {"date": "2022-04-11", "val1": 328667.79, "pnl1": 1559.94, "val2": 315162.86, "pnl2": 1548.34, "val3": 210828.43, "pnl3": 880.6}, {"date": "2022-04-25", "val1": 331632.67, "pnl1": 1574.91, "val2": 318005.91, "pnl2": 1563.21, "val3": 212928.7, "pnl3": 881.24}, {"date": "2022-05-09", "val1": 245910.91, "pnl1": 1135.73, "val2": 235750.56, "pnl2": 1130.43, "val3": 158003.83, "pnl3": 621.48}, {"date": "2022-05-23", "val1": 217944.89, "pnl1": 984.3, "val2": 208923.8, "pnl2": 980.55, "val3": 140105.58, "pnl3": 533.96}, {"date": "2022-06-06", "val1": 205604.55, "pnl1": 912.83, "val2": 197102.24, "pnl2": 908.97, "val3": 132241.56, "pnl3": 493.01}, {"date": "2022-06-20", "val1": 125112.98, "pnl1": 504.41, "val2": 119793.29, "pnl2": 506.09, "val3": 80415.33, "pnl3": 257.4}, {"date": "2022-07-04", "val1": 128029.93, "pnl1": 506.78, "val2": 122602.92, "pnl2": 508.0, "val3": 82234.06, "pnl3": 262.26}, {"date": "2022-07-18", "val1": 176253.25, "pnl1": 723.61, "val2": 168798.59, "pnl2": 724.82, "val3": 113202.8, "pnl3": 394.34}, {"date": "2022-08-01", "val1": 181955.64, "pnl1": 742.39, "val2": 174268.82, "pnl2": 743.3, "val3": 116941.55, "pnl3": 406.24}, {"date": "2022-08-15", "val1": 212161.06, "pnl1": 873.22, "val2": 203206.93, "pnl2": 873.91, "val3": 136428.26, "pnl3": 485.53}, {"date": "2022-08-29", "val1": 173561.04, "pnl1": 688.91, "val2": 166244.25, "pnl2": 689.2, "val3": 111676.65, "pnl3": 375.22}, {"date": "2022-09-12", "val1": 192173.46, "pnl1": 765.65, "val2": 184080.72, "pnl2": 765.65, "val3": 123726.17, "pnl3": 422.05}, {"date": "2022-09-26", "val1": 149801.45, "pnl1": 568.76, "val2": 143477.09, "pnl2": 569.2, "val3": 96516.2, "pnl3": 303.83}, {"date": "2022-10-10", "val1": 144826.08, "pnl1": 540.82, "val2": 138720.11, "pnl2": 541.04, "val3": 93380.85, "pnl3": 287.47}, {"date": "2022-10-24", "val1": 151042.19, "pnl1": 562.47, "val2": 144682.61, "pnl2": 562.47, "val3": 97460.24, "pnl3": 301.07}, {"date": "2022-11-07", "val1": 176477.99, "pnl1": 667.3, "val2": 169055.85, "pnl2": 667.04, "val3": 113943.58, "pnl3": 365.08}, {"date": "2022-11-21", "val1": 124811.95, "pnl1": 437.98, "val2": 119488.41, "pnl2": 439.33, "val3": 80652.22, "pnl3": 226.53}, {"date": "2022-12-05", "val1": 142160.1, "pnl1": 507.52, "val2": 136105.5, "pnl2": 508.84, "val3": 91935.97, "pnl3": 269.22}, {"date": "2022-12-19", "val1": 132013.14, "pnl1": 459.38, "val2": 126398.85, "pnl2": 460.4, "val3": 85441.53, "pnl3": 240.4}, {"date": "2023-01-02", "val1": 137432.29, "pnl1": 477.45, "val2": 131595.99, "pnl2": 478.32, "val3": 89019.06, "pnl3": 251.85}, {"date": "2023-01-16", "val1": 178738.77, "pnl1": 644.74, "val2": 171157.64, "pnl2": 645.62, "val3": 115851.82, "pnl3": 354.32}, {"date": "2023-01-30", "val1": 177717.74, "pnl1": 634.37, "val2": 170188.25, "pnl2": 635.0, "val3": 115259.1, "pnl3": 348.48}, {"date": "2023-02-13", "val1": 170993.82, "pnl1": 600.79, "val2": 163757.38, "pnl2": 601.17, "val3": 110966.2, "pnl3": 328.44}, {"date": "2023-02-27", "val1": 185754.25, "pnl1": 655.1, "val2": 177901.45, "pnl2": 655.26, "val3": 120613.74, "pnl3": 362.12}, {"date": "2023-03-13", "val1": 190509.88, "pnl1": 668.19, "val2": 182464.78, "pnl2": 668.11, "val3": 123774.2, "pnl3": 370.62}, {"date": "2023-03-27", "val1": 195464.07, "pnl1": 681.86, "val2": 187218.16, "pnl2": 681.54, "val3": 127062.65, "pnl3": 379.48}, {"date": "2023-04-10", "val1": 217683.72, "pnl1": 770.73, "val2": 208500.45, "pnl2": 770.38, "val3": 141712.17, "pnl3": 430.76}, {"date": "2023-04-24", "val1": 209893.51, "pnl1": 739.57, "val2": 201038.88, "pnl2": 739.24, "val3": 136829.55, "pnl3": 408.66}, {"date": "2023-05-08", "val1": 210545.35, "pnl1": 742.18, "val2": 201663.22, "pnl2": 741.84, "val3": 137455.41, "pnl3": 407.22}, {"date": "2023-05-22", "val1": 207302.73, "pnl1": 722.63, "val2": 198565.83, "pnl2": 722.05, "val3": 135407.9, "pnl3": 396.0}, {"date": "2023-06-05", "val1": 206621.36, "pnl1": 716.69, "val2": 197917.39, "pnl2": 715.99, "val3": 135093.18, "pnl3": 391.25}, {"date": "2023-06-19", "val1": 198445.49, "pnl1": 678.22, "val2": 190094.34, "pnl2": 677.32, "val3": 129816.76, "pnl3": 368.65}, {"date": "2023-07-03", "val1": 223503.88, "pnl1": 773.06, "val2": 214102.63, "pnl2": 771.93, "val3": 146345.54, "pnl3": 424.54}, {"date": "2023-07-17", "val1": 218637.78, "pnl1": 747.43, "val2": 209449.7, "pnl2": 746.09, "val3": 143228.94, "pnl3": 409.71}, {"date": "2023-07-31", "val1": 212539.35, "pnl1": 717.46, "val2": 203615.97, "pnl2": 715.93, "val3": 139302.97, "pnl3": 392.24}, {"date": "2023-08-14", "val1": 211521.9, "pnl1": 707.34, "val2": 202649.67, "pnl2": 705.6, "val3": 138705.33, "pnl3": 386.69}, {"date": "2023-08-28", "val1": 189666.83, "pnl1": 618.43, "val2": 181719.65, "pnl2": 616.7, "val3": 124442.43, "pnl3": 333.6}, {"date": "2023-09-11", "val1": 178247.34, "pnl1": 570.1, "val2": 170786.82, "pnl2": 568.31, "val3": 117017.1, "pnl3": 304.9}, {"date": "2023-09-25", "val1": 182634.52, "pnl1": 581.47, "val2": 174998.63, "pnl2": 579.47, "val3": 119964.92, "pnl3": 312.25}, {"date": "2023-10-09", "val1": 181886.69, "pnl1": 573.65, "val2": 174290.22, "pnl2": 571.51, "val3": 119540.63, "pnl3": 307.99}, {"date": "2023-10-23", "val1": 203430.16, "pnl1": 647.91, "val2": 194942.73, "pnl2": 645.34, "val3": 133771.68, "pnl3": 353.46}, {"date": "2023-11-06", "val1": 219247.47, "pnl1": 700.17, "val2": 210108.66, "pnl2": 697.23, "val3": 144243.05, "pnl3": 385.67}, {"date": "2023-11-20", "val1": 233338.09, "pnl1": 745.43, "val2": 223620.22, "pnl2": 742.1, "val3": 153581.16, "pnl3": 413.65}, {"date": "2023-12-04", "val1": 259071.6, "pnl1": 835.28, "val2": 248286.61, "pnl2": 831.48, "val3": 170656.56, "pnl3": 466.97}, {"date": "2023-12-18", "val1": 256306.93, "pnl1": 825.3, "val2": 245637.03, "pnl2": 821.54, "val3": 169035.15, "pnl3": 457.87}, {"date": "2024-01-01", "val1": 271621.16, "pnl1": 880.58, "val2": 260313.74, "pnl2": 876.6, "val3": 179338.48, "pnl3": 488.0}, {"date": "2024-01-15", "val1": 290068.45, "pnl1": 947.18, "val2": 277993.08, "pnl2": 942.93, "val3": 191726.12, "pnl3": 524.52}, {"date": "2024-01-29", "val1": 267643.92, "pnl1": 866.22, "val2": 256502.07, "pnl2": 862.3, "val3": 177104.36, "pnl3": 473.15}, {"date": "2024-02-12", "val1": 307184.22, "pnl1": 1008.97, "val2": 294396.33, "pnl2": 1004.47, "val3": 203484.38, "pnl3": 554.29}, {"date": "2024-02-26", "val1": 366767.78, "pnl1": 1224.07, "val2": 351499.47, "pnl2": 1218.7, "val3": 243161.47, "pnl3": 676.87}, {"date": "2024-03-11", "val1": 469416.2, "pnl1": 1594.64, "val2": 449874.7, "pnl2": 1587.77, "val3": 311427.85, "pnl3": 888.66}, {"date": "2024-03-25", "val1": 414633.27, "pnl1": 1396.87, "val2": 397372.35, "pnl2": 1390.8, "val3": 275284.84, "pnl3": 768.41}, {"date": "2024-04-08", "val1": 426665.47, "pnl1": 1440.31, "val2": 408903.65, "pnl2": 1434.06, "val3": 283478.75, "pnl3": 788.65}, {"date": "2024-04-22", "val1": 369569.41, "pnl1": 1234.19, "val2": 354184.46, "pnl2": 1228.77, "val3": 245747.0, "pnl3": 665.57}, {"date": "2024-05-06", "val1": 353678.92, "pnl1": 1176.82, "val2": 338955.48, "pnl2": 1171.64, "val3": 235375.75, "pnl3": 628.72}, {"date": "2024-05-20", "val1": 422874.15, "pnl1": 1426.62, "val2": 405270.17, "pnl2": 1420.43, "val3": 281649.74, "pnl3": 766.61}, {"date": "2024-06-03", "val1": 435032.23, "pnl1": 1470.51, "val2": 416922.11, "pnl2": 1464.14, "val3": 289944.2, "pnl3": 786.68}, {"date": "2024-06-17", "val1": 405514.72, "pnl1": 1363.95, "val2": 388633.39, "pnl2": 1358.01, "val3": 270466.84, "pnl3": 722.09}, {"date": "2024-07-01", "val1": 397516.35, "pnl1": 1335.08, "val2": 380967.99, "pnl2": 1329.26, "val3": 265334.82, "pnl3": 701.62}, {"date": "2024-07-15", "val1": 402273.1, "pnl1": 1352.25, "val2": 385526.72, "pnl2": 1346.36, "val3": 268725.25, "pnl3": 706.98}, {"date": "2024-07-29", "val1": 383134.07, "pnl1": 1283.16, "val2": 367184.43, "pnl2": 1277.54, "val3": 256136.5, "pnl3": 664.59}, {"date": "2024-08-12", "val1": 314592.49, "pnl1": 1027.57, "val2": 301476.92, "pnl2": 1023.66, "val3": 210384.86, "pnl3": 524.29}, {"date": "2024-08-26", "val1": 309962.54, "pnl1": 1003.07, "val2": 297048.41, "pnl2": 998.96, "val3": 207355.37, "pnl3": 511.67}, {"date": "2024-09-09", "val1": 273037.34, "pnl1": 864.8, "val2": 261669.68, "pnl2": 860.96, "val3": 182717.43, "pnl3": 435.83}, {"date": "2024-09-23", "val1": 306518.19, "pnl1": 975.5, "val2": 293765.54, "pnl2": 970.96, "val3": 205194.14, "pnl3": 498.23}, {"date": "2024-10-07", "val1": 280742.06, "pnl1": 878.2, "val2": 269069.86, "pnl2": 873.83, "val3": 188002.52, "pnl3": 444.93}, {"date": "2024-10-21", "val1": 309216.86, "pnl1": 969.95, "val2": 296369.17, "pnl2": 964.93, "val3": 207137.57, "pnl3": 496.94}, {"date": "2024-11-04", "val1": 278277.55, "pnl1": 856.28, "val2": 266723.39, "pnl2": 851.56, "val3": 186475.85, "pnl3": 434.31}, {"date": "2024-11-18", "val1": 372218.74, "pnl1": 1179.1, "val2": 356764.12, "pnl2": 1172.79, "val3": 249621.68, "pnl3": 611.17}, {"date": "2024-12-02", "val1": 422766.14, "pnl1": 1352.8, "val2": 405212.77, "pnl2": 1345.64, "val3": 283727.07, "pnl3": 703.76}, {"date": "2024-12-16", "val1": 462545.44, "pnl1": 1489.5, "val2": 443340.42, "pnl2": 1481.66, "val3": 310631.16, "pnl3": 775.02}, {"date": "2024-12-30", "val1": 390092.86, "pnl1": 1240.53, "val2": 373896.09, "pnl2": 1233.91, "val3": 262172.49, "pnl3": 634.38}, {"date": "2025-01-13", "val1": 364062.61, "pnl1": 1151.07, "val2": 348946.63, "pnl2": 1144.9, "val3": 244863.24, "pnl3": 582.07}, {"date": "2025-01-27", "val1": 369276.08, "pnl1": 1168.99, "val2": 353943.64, "pnl2": 1162.73, "val3": 248566.65, "pnl3": 588.55}, {"date": "2025-02-10", "val1": 308984.97, "pnl1": 954.56, "val2": 296163.82, "pnl2": 949.11, "val3": 208046.47, "pnl3": 473.13}, {"date": "2025-02-24", "val1": 292030.93, "pnl1": 889.94, "val2": 279921.23, "pnl2": 884.6, "val3": 196693.53, "pnl3": 438.89}, {"date": "2025-03-10", "val1": 216981.66, "pnl1": 628.13, "val2": 207875.93, "pnl2": 626.58, "val3": 146138.72, "pnl3": 298.2}, {"date": "2025-03-24", "val1": 242330.3, "pnl1": 707.77, "val2": 232169.54, "pnl2": 705.86, "val3": 163279.14, "pnl3": 342.49}, {"date": "2025-04-07", "val1": 181202.96, "pnl1": 496.06, "val2": 173570.76, "pnl2": 495.24, "val3": 122027.92, "pnl3": 228.92}, {"date": "2025-04-21", "val1": 184692.94, "pnl1": 499.65, "val2": 176930.36, "pnl2": 498.55, "val3": 124309.76, "pnl3": 233.27}, {"date": "2025-05-05", "val1": 213229.95, "pnl1": 583.43, "val2": 204284.88, "pnl2": 581.86, "val3": 143447.31, "pnl3": 282.53}, {"date": "2025-05-19", "val1": 296365.54, "pnl1": 843.84, "val2": 283941.34, "pnl2": 841.45, "val3": 199441.44, "pnl3": 429.02}, {"date": "2025-06-02", "val1": 305859.81, "pnl1": 867.91, "val2": 293046.05, "pnl2": 865.24, "val3": 205896.64, "pnl3": 443.26}, {"date": "2025-06-16", "val1": 298636.42, "pnl1": 839.11, "val2": 286133.45, "pnl2": 836.3, "val3": 201097.76, "pnl3": 427.82}, {"date": "2025-06-30", "val1": 291949.24, "pnl1": 812.34, "val2": 279734.74, "pnl2": 809.41, "val3": 196661.02, "pnl3": 413.48}, {"date": "2025-07-14", "val1": 354105.54, "pnl1": 1003.13, "val2": 339295.52, "pnl2": 999.47, "val3": 238669.05, "pnl3": 519.92}, {"date": "2025-07-28", "val1": 446389.04, "pnl1": 1290.62, "val2": 427719.38, "pnl2": 1286.0, "val3": 301069.61, "pnl3": 677.96}, {"date": "2025-08-11", "val1": 496235.62, "pnl1": 1445.91, "val2": 475481.19, "pnl2": 1440.77, "val3": 334902.41, "pnl3": 760.93}, {"date": "2025-08-25", "val1": 514208.68, "pnl1": 1501.9, "val2": 492702.55, "pnl2": 1496.57, "val3": 347233.64, "pnl3": 788.07}, {"date": "2025-09-08", "val1": 506005.89, "pnl1": 1476.34, "val2": 484842.83, "pnl2": 1471.1, "val3": 341894.29, "pnl3": 769.96}, {"date": "2025-09-22", "val1": 493399.13, "pnl1": 1437.07, "val2": 472763.33, "pnl2": 1431.96, "val3": 333569.07, "pnl3": 744.48}, {"date": "2025-10-06", "val1": 550379.24, "pnl1": 1614.58, "val2": 527360.32, "pnl2": 1608.88, "val3": 372302.36, "pnl3": 837.79}, {"date": "2025-10-20", "val1": 467565.2, "pnl1": 1356.59, "val2": 448009.87, "pnl2": 1351.75, "val3": 316476.89, "pnl3": 693.18}, {"date": "2025-11-03", "val1": 423456.23, "pnl1": 1219.18, "val2": 405745.7, "pnl2": 1214.79, "val3": 286808.69, "pnl3": 615.23}, {"date": "2025-11-17", "val1": 356299.42, "pnl1": 1006.52, "val2": 341341.82, "pnl2": 1004.67, "val3": 241440.33, "pnl3": 499.11}, {"date": "2025-12-01", "val1": 329182.65, "pnl1": 916.0, "val2": 315371.61, "pnl2": 914.06, "val3": 223127.9, "pnl3": 450.93}, {"date": "2025-12-15", "val1": 348873.99, "pnl1": 970.17, "val2": 334244.97, "pnl2": 967.88, "val3": 236537.96, "pnl3": 481.17}, {"date": "2025-12-29", "val1": 345900.41, "pnl1": 954.57, "val2": 331404.35, "pnl2": 952.08, "val3": 234585.49, "pnl3": 473.56}, {"date": "2026-01-12", "val1": 364681.23, "pnl1": 1005.09, "val2": 349406.32, "pnl2": 1002.23, "val3": 247385.49, "pnl3": 501.91}, {"date": "2026-01-26", "val1": 345388.88, "pnl1": 940.33, "val2": 330930.09, "pnl2": 937.4, "val3": 234360.03, "pnl3": 467.46}, {"date": "2026-02-09", "val1": 248400.16, "pnl1": 641.49, "val2": 237941.24, "pnl2": 640.67, "val3": 168542.46, "pnl3": 306.13}, {"date": "2026-02-23", "val1": 232149.93, "pnl1": 584.81, "val2": 222391.93, "pnl2": 583.76, "val3": 157445.7, "pnl3": 277.57}], "SOL": [{"date": "2021-03-01", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 100.0, "pnl3": 0.0}, {"date": "2021-03-15", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 298.56, "pnl3": -0.48}, {"date": "2021-03-29", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 627.7, "pnl3": 25.54}, {"date": "2021-04-12", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1169.67, "pnl3": 67.1}, {"date": "2021-04-26", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2037.54, "pnl3": 126.39}, {"date": "2021-05-10", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2183.33, "pnl3": 98.48}, {"date": "2021-05-24", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1767.84, "pnl3": 35.99}, {"date": "2021-06-07", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2368.31, "pnl3": 57.89}, {"date": "2021-06-21", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 1814.0, "pnl3": 6.71}, {"date": "2021-07-05", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2444.74, "pnl3": 28.67}, {"date": "2021-07-19", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2000.43, "pnl3": -4.74}, {"date": "2021-08-02", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 2924.77, "pnl3": 27.16}, {"date": "2021-08-16", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 5729.24, "pnl3": 129.17}, {"date": "2021-08-30", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 10431.05, "pnl3": 286.34}, {"date": "2021-09-13", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 16242.92, "pnl3": 460.1}, {"date": "2021-09-27", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 13266.59, "pnl3": 327.95}, {"date": "2021-10-11", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 14272.47, "pnl3": 332.5}, {"date": "2021-10-25", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 20907.2, "pnl3": 497.35}, {"date": "2021-11-08", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 24973.4, "pnl3": 574.96}, {"date": "2021-11-22", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 21877.51, "pnl3": 460.96}, {"date": "2021-12-06", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 19836.81, "pnl3": 383.82}, {"date": "2021-12-20", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 18034.01, "pnl3": 319.4}, {"date": "2022-01-03", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 17832.08, "pnl3": 296.27}, {"date": "2022-01-17", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 14854.24, "pnl3": 216.05}, {"date": "2022-01-31", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 10779.38, "pnl3": 119.99}, {"date": "2022-02-14", "val1": 0.0, "pnl1": 0.0, "val2": 0.0, "pnl2": 0.0, "val3": 10623.32, "pnl3": 108.3}, {"date": "2022-02-28", "val1": 120.15, "pnl1": 20.15, "val2": 48.06, "pnl2": 20.15, "val3": 11208.36, "pnl3": 111.48}, {"date": "2022-03-14", "val1": 297.36, "pnl1": -0.88, "val2": 178.95, "pnl2": -0.59, "val3": 9332.11, "pnl3": 69.67}, {"date": "2022-03-28", "val1": 387.17, "pnl1": 29.06, "val2": 232.99, "pnl2": 29.44, "val3": 12369.96, "pnl3": 117.02}, {"date": "2022-04-11", "val1": 364.91, "pnl1": 21.64, "val2": 219.59, "pnl2": 22.0, "val3": 11834.19, "pnl3": 100.58}, {"date": "2022-04-25", "val1": 369.75, "pnl1": 23.25, "val2": 222.5, "pnl2": 23.61, "val3": 12189.61, "pnl3": 99.83}, {"date": "2022-05-09", "val1": 398.62, "pnl1": -20.28, "val2": 205.37, "pnl2": -21.01, "val3": 7673.82, "pnl3": 21.81}, {"date": "2022-05-23", "val1": 506.73, "pnl1": -27.61, "val2": 331.01, "pnl2": -23.91, "val3": 6261.58, "pnl3": -3.67}, {"date": "2022-06-06", "val1": 726.63, "pnl1": -27.34, "val2": 575.14, "pnl2": -21.75, "val3": 5587.95, "pnl3": -16.6}, {"date": "2022-06-20", "val1": 1050.5, "pnl1": -24.96, "val2": 862.95, "pnl2": -20.47, "val3": 4868.64, "pnl3": -29.44}, {"date": "2022-07-04", "val1": 1484.92, "pnl1": -17.5, "val2": 1289.55, "pnl2": -13.16, "val3": 5267.03, "pnl3": -25.82}, {"date": "2022-07-18", "val1": 2120.83, "pnl1": 0.99, "val2": 1889.22, "pnl2": 5.84, "val3": 6474.33, "pnl3": -11.31}, {"date": "2022-08-01", "val1": 2356.99, "pnl1": -1.79, "val2": 1998.96, "pnl2": 1.73, "val3": 6409.77, "pnl3": -14.54}, {"date": "2022-08-15", "val1": 2677.78, "pnl1": 2.99, "val2": 2301.95, "pnl2": 6.33, "val3": 6931.99, "pnl3": -9.97}, {"date": "2022-08-29", "val1": 2368.78, "pnl1": -21.04, "val2": 1930.23, "pnl2": -19.41, "val3": 5331.88, "pnl3": -32.51}, {"date": "2022-09-12", "val1": 3068.27, "pnl1": -7.02, "val2": 2561.8, "pnl2": -4.94, "val3": 6373.83, "pnl3": -21.31}, {"date": "2022-09-26", "val1": 3084.24, "pnl1": -14.33, "val2": 2625.94, "pnl2": -12.32, "val3": 5971.64, "pnl3": -28.05}, {"date": "2022-10-10", "val1": 3303.8, "pnl1": -17.4, "val2": 2871.47, "pnl2": -15.42, "val3": 5830.39, "pnl3": -31.41}, {"date": "2022-10-24", "val1": 3306.81, "pnl1": -24.85, "val2": 2923.99, "pnl2": -22.95, "val3": 5353.38, "pnl3": -38.47}, {"date": "2022-11-07", "val1": 3752.02, "pnl1": -20.17, "val2": 3351.34, "pnl2": -18.16, "val3": 5794.05, "pnl3": -34.9}, {"date": "2022-11-21", "val1": 1867.53, "pnl1": -63.38, "val2": 1545.25, "pnl2": -64.27, "val3": 2498.6, "pnl3": -72.54}, {"date": "2022-12-05", "val1": 2589.18, "pnl1": -52.92, "val2": 2212.69, "pnl2": -53.17, "val3": 3122.66, "pnl3": -66.42}, {"date": "2022-12-19", "val1": 2616.38, "pnl1": -55.65, "val2": 2291.1, "pnl2": -55.3, "val3": 2887.58, "pnl3": -69.6}, {"date": "2023-01-02", "val1": 2871.05, "pnl1": -54.43, "val2": 2563.75, "pnl2": -53.6, "val3": 2927.61, "pnl3": -69.82}, {"date": "2023-01-16", "val1": 6491.93, "pnl1": -3.11, "val2": 5849.55, "pnl2": -1.27, "val3": 6365.05, "pnl3": -35.71}, {"date": "2023-01-30", "val1": 6993.51, "pnl1": -1.5, "val2": 6340.78, "pnl2": 0.25, "val3": 6666.11, "pnl3": -34.0}, {"date": "2023-02-13", "val1": 6445.72, "pnl1": -14.06, "val2": 5879.89, "pnl2": -12.57, "val3": 5970.25, "pnl3": -42.04}, {"date": "2023-02-27", "val1": 7324.83, "pnl1": -6.09, "val2": 6586.97, "pnl2": -4.61, "val3": 6705.64, "pnl3": -36.14}, {"date": "2023-03-13", "val1": 6986.24, "pnl1": -14.8, "val2": 6322.56, "pnl2": -13.45, "val3": 6230.41, "pnl3": -41.77}, {"date": "2023-03-27", "val1": 7198.37, "pnl1": -16.3, "val2": 6550.63, "pnl2": -14.98, "val3": 6270.73, "pnl3": -42.47}, {"date": "2023-04-10", "val1": 7956.99, "pnl1": -11.59, "val2": 7277.37, "pnl2": -10.21, "val3": 6781.54, "pnl3": -38.91}, {"date": "2023-04-24", "val1": 8430.61, "pnl1": -9.35, "val2": 7615.05, "pnl2": -8.09, "val3": 7127.59, "pnl3": -36.92}, {"date": "2023-05-08", "val1": 8518.72, "pnl1": -12.18, "val2": 7732.15, "pnl2": -10.97, "val3": 7068.12, "pnl3": -38.54}, {"date": "2023-05-22", "val1": 8454.5, "pnl1": -16.29, "val2": 7709.51, "pnl2": -15.14, "val3": 6887.53, "pnl3": -41.13}, {"date": "2023-06-05", "val1": 9052.42, "pnl1": -13.79, "val2": 8289.5, "pnl2": -12.6, "val3": 7250.51, "pnl3": -39.07}, {"date": "2023-06-19", "val1": 7699.18, "pnl1": -29.37, "val2": 7032.03, "pnl2": -28.5, "val3": 6042.65, "pnl3": -50.06}, {"date": "2023-07-03", "val1": 9647.08, "pnl1": -14.63, "val2": 8848.99, "pnl2": -13.54, "val3": 7447.04, "pnl3": -39.45}, {"date": "2023-07-17", "val1": 13775.41, "pnl1": 18.75, "val2": 12664.88, "pnl2": 20.22, "val3": 10588.27, "pnl3": -15.29}, {"date": "2023-07-31", "val1": 12600.49, "pnl1": 5.0, "val2": 11617.17, "pnl2": 6.24, "val3": 9576.9, "pnl3": -24.59}, {"date": "2023-08-14", "val1": 13788.25, "pnl1": 11.2, "val2": 12744.84, "pnl2": 12.44, "val3": 10371.0, "pnl3": -19.6}, {"date": "2023-08-28", "val1": 11652.36, "pnl1": -8.97, "val2": 10684.02, "pnl2": -8.02, "val3": 8665.12, "pnl3": -33.85}, {"date": "2023-09-11", "val1": 10424.35, "pnl1": -21.03, "val2": 9589.77, "pnl2": -20.19, "val3": 7658.97, "pnl3": -42.41}, {"date": "2023-09-25", "val1": 11804.23, "pnl1": -13.2, "val2": 10891.0, "pnl2": -12.28, "val3": 8579.5, "pnl3": -36.45}, {"date": "2023-10-09", "val1": 13843.15, "pnl1": -1.12, "val2": 12802.28, "pnl2": -0.1, "val3": 9973.16, "pnl3": -27.2}, {"date": "2023-10-23", "val1": 20335.44, "pnl1": 42.21, "val2": 18833.95, "pnl2": 43.61, "val3": 14619.74, "pnl3": 5.18}, {"date": "2023-11-06", "val1": 27113.46, "pnl1": 86.99, "val2": 25127.8, "pnl2": 88.72, "val3": 19554.67, "pnl3": 38.69}, {"date": "2023-11-20", "val1": 36490.28, "pnl1": 149.93, "val2": 33825.94, "pnl2": 152.15, "val3": 26447.95, "pnl3": 84.95}, {"date": "2023-12-04", "val1": 39872.62, "pnl1": 171.24, "val2": 36969.49, "pnl2": 173.54, "val3": 29030.26, "pnl3": 100.21}, {"date": "2023-12-18", "val1": 48139.53, "pnl1": 227.48, "val2": 44634.48, "pnl2": 230.26, "val3": 35255.13, "pnl3": 139.83}, {"date": "2024-01-01", "val1": 71096.68, "pnl1": 383.65, "val2": 65920.12, "pnl2": 387.76, "val3": 52258.77, "pnl3": 250.73}, {"date": "2024-01-15", "val1": 61037.97, "pnl1": 315.22, "val2": 56593.78, "pnl2": 318.75, "val3": 45061.64, "pnl3": 198.42}, {"date": "2024-01-29", "val1": 65773.0, "pnl1": 347.44, "val2": 60984.06, "pnl2": 351.23, "val3": 48778.58, "pnl3": 218.81}, {"date": "2024-02-12", "val1": 72215.76, "pnl1": 391.26, "val2": 66957.71, "pnl2": 395.43, "val3": 53773.37, "pnl3": 246.92}, {"date": "2024-02-26", "val1": 71090.22, "pnl1": 383.61, "val2": 65914.12, "pnl2": 387.71, "val3": 53133.8, "pnl3": 238.43}, {"date": "2024-03-11", "val1": 96272.58, "pnl1": 554.92, "val2": 89262.96, "pnl2": 560.47, "val3": 72167.12, "pnl3": 353.88}, {"date": "2024-03-25", "val1": 122250.59, "pnl1": 731.64, "val2": 113349.5, "pnl2": 738.69, "val3": 91837.02, "pnl3": 470.42}, {"date": "2024-04-08", "val1": 116875.16, "pnl1": 695.07, "val2": 108365.46, "pnl2": 701.82, "val3": 87992.88, "pnl3": 439.83}, {"date": "2024-04-22", "val1": 101525.11, "pnl1": 590.65, "val2": 94133.04, "pnl2": 596.51, "val3": 76649.46, "pnl3": 364.54}, {"date": "2024-05-06", "val1": 98853.56, "pnl1": 572.47, "val2": 91656.02, "pnl2": 578.18, "val3": 74843.42, "pnl3": 348.16}, {"date": "2024-05-20", "val1": 120769.27, "pnl1": 721.56, "val2": 111976.04, "pnl2": 728.53, "val3": 91662.66, "pnl3": 442.38}, {"date": "2024-06-03", "val1": 106661.2, "pnl1": 625.59, "val2": 98895.17, "pnl2": 631.74, "val3": 81151.68, "pnl3": 374.57}, {"date": "2024-06-17", "val1": 92676.02, "pnl1": 530.45, "val2": 85928.27, "pnl2": 535.8, "val3": 70701.33, "pnl3": 308.68}, {"date": "2024-07-01", "val1": 94986.19, "pnl1": 541.8, "val2": 88078.3, "pnl2": 546.92, "val3": 72590.01, "pnl3": 314.8}, {"date": "2024-07-15", "val1": 103331.42, "pnl1": 593.5, "val2": 95824.91, "pnl2": 598.69, "val3": 79094.45, "pnl3": 346.86}, {"date": "2024-07-29", "val1": 118366.28, "pnl1": 694.4, "val2": 109767.56, "pnl2": 700.35, "val3": 90804.85, "pnl3": 407.29}, {"date": "2024-08-12", "val1": 95057.46, "pnl1": 529.52, "val2": 88139.28, "pnl2": 534.55, "val3": 72972.99, "pnl3": 303.17}, {"date": "2024-08-26", "val1": 102303.55, "pnl1": 568.65, "val2": 94873.21, "pnl2": 573.34, "val3": 78584.14, "pnl3": 329.42}, {"date": "2024-09-09", "val1": 88153.03, "pnl1": 468.73, "val2": 81704.92, "pnl2": 474.17, "val3": 67760.86, "pnl3": 266.27}, {"date": "2024-09-23", "val1": 94699.89, "pnl1": 503.18, "val2": 87788.27, "pnl2": 508.37, "val3": 72841.87, "pnl3": 289.53}, {"date": "2024-10-07", "val1": 94351.44, "pnl1": 493.41, "val2": 87479.44, "pnl2": 497.95, "val3": 72618.71, "pnl3": 284.23}, {"date": "2024-10-21", "val1": 109013.32, "pnl1": 581.33, "val2": 101081.12, "pnl2": 586.23, "val3": 84027.7, "pnl3": 339.94}, {"date": "2024-11-04", "val1": 103720.72, "pnl1": 544.23, "val2": 96180.9, "pnl2": 548.56, "val3": 80059.66, "pnl3": 314.82}, {"date": "2024-11-18", "val1": 157462.43, "pnl1": 878.03, "val2": 146015.94, "pnl2": 884.6, "val3": 121749.61, "pnl3": 524.36}, {"date": "2024-12-02", "val1": 148223.11, "pnl1": 820.64, "val2": 137448.26, "pnl2": 826.83, "val3": 114802.17, "pnl3": 482.75}, {"date": "2024-12-16", "val1": 141965.06, "pnl1": 781.77, "val2": 131645.13, "pnl2": 787.69, "val3": 110154.97, "pnl3": 453.54}, {"date": "2024-12-30", "val1": 125673.13, "pnl1": 680.58, "val2": 116537.51, "pnl2": 685.82, "val3": 97714.24, "pnl3": 386.14}, {"date": "2025-01-13", "val1": 120084.88, "pnl1": 645.87, "val2": 111355.5, "pnl2": 650.88, "val3": 93553.03, "pnl3": 360.85}, {"date": "2025-01-27", "val1": 154244.76, "pnl1": 858.04, "val2": 143032.17, "pnl2": 864.48, "val3": 120362.52, "pnl3": 487.13}, {"date": "2025-02-10", "val1": 131642.24, "pnl1": 717.65, "val2": 122072.71, "pnl2": 723.15, "val3": 102917.68, "pnl3": 397.19}, {"date": "2025-02-24", "val1": 93301.97, "pnl1": 472.4, "val2": 86472.61, "pnl2": 477.64, "val3": 72982.58, "pnl3": 249.2}, {"date": "2025-03-10", "val1": 78030.28, "pnl1": 372.91, "val2": 72272.15, "pnl2": 378.31, "val3": 61076.67, "pnl3": 189.46}, {"date": "2025-03-24", "val1": 93204.15, "pnl1": 458.11, "val2": 86341.8, "pnl2": 463.96, "val3": 72999.38, "pnl3": 242.72}, {"date": "2025-04-07", "val1": 70903.67, "pnl1": 319.55, "val2": 65671.93, "pnl2": 324.1, "val3": 55573.49, "pnl3": 158.48}, {"date": "2025-04-21", "val1": 90705.61, "pnl1": 430.44, "val2": 84027.92, "pnl2": 435.72, "val3": 71138.47, "pnl3": 227.83}, {"date": "2025-05-05", "val1": 97653.31, "pnl1": 464.47, "val2": 90478.8, "pnl2": 469.59, "val3": 76630.38, "pnl3": 249.91}, {"date": "2025-05-19", "val1": 111253.79, "pnl1": 535.74, "val2": 103094.44, "pnl2": 540.94, "val3": 87345.07, "pnl3": 295.23}, {"date": "2025-06-02", "val1": 104755.96, "pnl1": 491.84, "val2": 97087.07, "pnl2": 496.17, "val3": 82284.4, "pnl3": 268.99}, {"date": "2025-06-16", "val1": 100868.25, "pnl1": 463.51, "val2": 93498.14, "pnl2": 467.17, "val3": 79272.17, "pnl3": 252.32}, {"date": "2025-06-30", "val1": 103812.58, "pnl1": 473.55, "val2": 96242.47, "pnl2": 476.82, "val3": 81630.46, "pnl3": 259.61}, {"date": "2025-07-14", "val1": 108983.83, "pnl1": 495.54, "val2": 101051.87, "pnl2": 498.47, "val3": 85741.4, "pnl3": 274.42}, {"date": "2025-07-28", "val1": 123125.89, "pnl1": 569.16, "val2": 114171.93, "pnl2": 572.19, "val3": 96982.33, "pnl3": 319.84}, {"date": "2025-08-11", "val1": 117768.14, "pnl1": 533.16, "val2": 109218.57, "pnl2": 535.55, "val3": 92805.33, "pnl3": 298.31}, {"date": "2025-08-25", "val1": 126195.87, "pnl1": 574.84, "val2": 117041.91, "pnl2": 577.13, "val3": 99568.37, "pnl3": 323.7}, {"date": "2025-09-08", "val1": 144336.53, "pnl1": 671.85, "val2": 133866.69, "pnl2": 674.47, "val3": 114089.83, "pnl3": 381.39}, {"date": "2025-09-22", "val1": 148563.28, "pnl1": 694.46, "val2": 137786.84, "pnl2": 697.15, "val3": 117624.89, "pnl3": 392.15}, {"date": "2025-10-06", "val1": 156632.54, "pnl1": 737.61, "val2": 145270.77, "pnl2": 740.44, "val3": 124222.93, "pnl3": 415.45}, {"date": "2025-10-20", "val1": 127987.92, "pnl1": 580.79, "val2": 118711.23, "pnl2": 582.84, "val3": 101616.91, "pnl3": 318.18}, {"date": "2025-11-03", "val1": 112216.01, "pnl1": 490.61, "val2": 104035.79, "pnl2": 493.64, "val3": 89132.52, "pnl3": 263.81}, {"date": "2025-11-17", "val1": 88695.55, "pnl1": 361.96, "val2": 82182.89, "pnl2": 365.23, "val3": 70487.03, "pnl3": 185.37}, {"date": "2025-12-01", "val1": 85955.12, "pnl1": 343.07, "val2": 79657.75, "pnl2": 345.89, "val3": 68348.5, "pnl3": 174.49}, {"date": "2025-12-15", "val1": 86931.46, "pnl1": 343.53, "val2": 80576.91, "pnl2": 346.04, "val3": 69164.98, "pnl3": 175.56}, {"date": "2025-12-29", "val1": 84048.23, "pnl1": 324.49, "val2": 77918.9, "pnl2": 326.6, "val3": 66911.45, "pnl3": 164.47}, {"date": "2026-01-12", "val1": 95116.55, "pnl1": 375.58, "val2": 88194.71, "pnl2": 377.63, "val3": 75764.0, "pnl3": 197.11}, {"date": "2026-01-26", "val1": 85075.16, "pnl1": 321.16, "val2": 78898.11, "pnl2": 322.71, "val3": 67804.94, "pnl3": 163.83}, {"date": "2026-02-09", "val1": 59783.02, "pnl1": 190.21, "val2": 55377.43, "pnl2": 192.0, "val3": 47538.39, "pnl3": 83.55}, {"date": "2026-02-23", "val1": 58497.0, "pnl1": 178.56, "val2": 54215.29, "pnl2": 179.97, "val3": 46399.14, "pnl3": 77.77}]};
+
+const charts = {};
+let currentCoin = 'BTC';
+let chartModes  = {};  // per coin
+
+// ── Insight text ──────────────────────────────────────────────────────────────
+function genInsights(sym) {
+  const d  = RAW[sym];
+  const s1 = d.s1, s2 = d.s2, s3 = d.s3;
+  const winner_roi  = s2.roi > s1.roi ? 2 : 1;
+  const winner_eff  = s2.spent < s1.spent ? '优化版' : '经典版';
+  const saved       = Math.abs(s1.spent - s2.spent);
+  const diff_roi    = Math.abs(s2.roi - s1.roi).toFixed(1);
+  const best_vs_dca = s2.roi > s3.roi ? s2.roi - s3.roi : s1.roi - s3.roi;
+
+  const i1 = winner_roi === 2
+    ? `<span class="tag tc">优化版</span> ROI 领先经典版 <strong>+${diff_roi}%</strong>（${s2.roi}% vs ${s1.roi}%）。斜率修正 4.7777 更精准识别了市场底部，动量过滤进一步避开了急跌陷阱。`
+    : `<span class="tag ta">经典版</span> ROI 领先优化版 <strong>+${diff_roi}%</strong>（${s1.roi}% vs ${s2.roi}%）。经典版在此资产上斜率拟合优势更明显，定投时机捕获更充分。`;
+
+  const i2 = `优化版少投入 <strong>$$${saved.toLocaleString()}</strong>（$${s2.spent.toLocaleString()} vs $${s1.spent.toLocaleString()}），资本利用效率更高。两者均大幅跑赢无脑定投（+<strong>${best_vs_dca.toFixed(1)}%</strong> 超额收益），验证了 AHR999 择机策略的有效性。`;
+
+  return [i1, i2];
+}
+
+// ── Build panel HTML ──────────────────────────────────────────────────────────
+function buildPanel(sym) {
+  const d  = RAW[sym];
+  const s1 = d.s1, s2 = d.s2, s3 = d.s3;
+  const ins = genInsights(sym);
+
+  // Best ROI badge
+  const maxRoi = Math.max(s1.roi, s2.roi, s3.roi);
+  const b1 = s1.roi === maxRoi ? '<span class="badge-best">BEST ROI</span>' : (s1.spent === Math.min(s1.spent,s2.spent) ? '<span class="badge-eff">高效</span>' : '');
+  const b2 = s2.roi === maxRoi ? '<span class="badge-best">BEST ROI</span>' : (s2.spent === Math.min(s1.spent,s2.spent) ? '<span class="badge-eff">省钱</span>' : '');
+  const b3 = s3.roi === maxRoi ? '<span class="badge-best">BEST ROI</span>' : '';
+
+  // MDD worst bar width
+  const wdds = [Math.abs(s1.mdd), Math.abs(s2.mdd), Math.abs(s3.mdd)];
+  const maxDD = Math.max(...wdds);
+  const ddW = wdds.map(v => maxDD > 0 ? (v/maxDD*100).toFixed(1) : 0);
+
+  return `
+  <div class="coin-panel ${sym === 'BTC' ? 'active' : ''}" id="panel-${sym}">
+    <div class="score-grid">
+      ${buildCard('s1', s1, b1)}
+      ${buildCard('s2', s2, b2)}
+      ${buildCard('s3', s3, b3)}
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-hdr">
+        <div>
+          <div class="chart-title">${sym} · 净值走势对比</div>
+          <div class="chart-sub" id="csub-${sym}">持仓市值走势</div>
+        </div>
+        <div class="tog">
+          <button class="tbtn active" onclick="toggleChart('${sym}','val',this)">市值</button>
+          <button class="tbtn"       onclick="toggleChart('${sym}','pnl',this)">收益率 %</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chart-${sym}"></canvas></div>
+    </div>
+
+    <div class="mt">
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>经典 AHR999</th>
+            <th>AHR999 优化版</th>
+            <th>无脑定投</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${metricRow('ROI', s1.roi+'%', s2.roi+'%', s3.roi+'%', Math.max(s1.roi,s2.roi,s3.roi), 'pct')}
+          ${metricRow('年化 CAGR', s1.cagr+'%', s2.cagr+'%', s3.cagr+'%', Math.max(s1.cagr,s2.cagr,s3.cagr), 'pct')}
+          ${metricRow('最大回撤 MDD', s1.mdd+'%', s2.mdd+'%', s3.mdd+'%', Math.max(s1.mdd,s2.mdd,s3.mdd), 'mdd')}
+          ${metricRow('Calmar 比率', s1.calmar, s2.calmar, s3.calmar, Math.max(s1.calmar,s2.calmar,s3.calmar), 'num')}
+          ${metricRow('总投入 USDT', '$'+s1.spent.toLocaleString(), '$'+s2.spent.toLocaleString(), '$'+s3.spent.toLocaleString(), null, 'spent')}
+          ${metricRow('最终市值', '$'+s1.val.toLocaleString(), '$'+s2.val.toLocaleString(), '$'+s3.val.toLocaleString(), Math.max(s1.val,s2.val,s3.val), 'num')}
+          <tr>
+            <td class="rlabel">回测周期</td>
+            <td colspan="3" style="text-align:center;color:var(--muted)">${d.period} · ${d.years} 年 · ${sym} 最终价 $$${d.finalPrice.toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="insights">
+      <div class="ic">
+        <h3>策略对比分析</h3>
+        <p>${ins[0]}</p>
+      </div>
+      <div class="ic">
+        <h3>资金效率</h3>
+        <p>${ins[1]}</p>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-hdr">
+        <div class="chart-title">最大回撤对比（MDD）</div>
+      </div>
+      <div class="dd" style="padding:8px 4px">
+        <div class="dd-row">
+          <div class="dd-lbl" style="color:var(--s1)">经典 AHR999</div>
+          <div class="dd-bw"><div class="dd-b" style="width:${ddW[0]}%;background:var(--s1);opacity:.7"></div></div>
+          <div class="dd-v">${s1.mdd}%</div>
+        </div>
+        <div class="dd-row">
+          <div class="dd-lbl" style="color:var(--s2)">AHR999 优化版</div>
+          <div class="dd-bw"><div class="dd-b" style="width:${ddW[1]}%;background:var(--s2);opacity:.7"></div></div>
+          <div class="dd-v">${s2.mdd}%</div>
+        </div>
+        <div class="dd-row">
+          <div class="dd-lbl" style="color:var(--muted)">无脑定投</div>
+          <div class="dd-bw"><div class="dd-b" style="width:${ddW[2]}%;background:var(--s3);opacity:.7"></div></div>
+          <div class="dd-v">${s3.mdd}%</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildCard(cls, s, badge) {
+  const roiColor = s.roi > 0 ? 'var(--green)' : 'var(--red)';
+  return `
+  <div class="sc ${cls}">
+    <div class="slabel">${s.label}${badge}</div>
+    <div class="roi" style="color:${roiColor}">${s.roi > 0 ? '+' : ''}${s.roi}%</div>
+    <div class="roi-sub">总 ROI（投入 → 现值）</div>
+    <div class="stats">
+      <div><span class="slb">年化 CAGR</span><span class="svl">${s.cagr}%</span></div>
+      <div><span class="slb">最大回撤</span><span class="svl" style="color:var(--red)">${s.mdd}%</span></div>
+      <div><span class="slb">总投入</span><span class="svl">$${s.spent.toLocaleString()}</span></div>
+      <div><span class="slb">现值</span><span class="svl">$${s.val.toLocaleString()}</span></div>
+    </div>
+  </div>`;
+}
+
+function metricRow(label, v1, v2, v3, bestVal, type) {
+  function cls(v, raw) {
+    if (type === 'spent') return '';
+    if (type === 'mdd')   return raw === bestVal ? 'hs2' : '';
+    return raw === bestVal ? 'hs2' : '';
+  }
+  // For spent, lowest is best
+  let r1='', r2='', r3='';
+  if (type === 'spent') {
+    const minV = Math.min(
+      parseFloat(v1.replace(/[^0-9.-]/g,'')),
+      parseFloat(v2.replace(/[^0-9.-]/g,'')),
+      parseFloat(v3.replace(/[^0-9.-]/g,''))
+    );
+    r1 = parseFloat(v1.replace(/[^0-9.-]/g,'')) === minV ? 'hs2' : '';
+    r2 = parseFloat(v2.replace(/[^0-9.-]/g,'')) === minV ? 'hs2' : '';
+    r3 = parseFloat(v3.replace(/[^0-9.-]/g,'')) === minV ? 'hs2' : '';
+  } else if (type === 'mdd') {
+    // For MDD, closest to 0 (least negative) is best
+    const raw1 = parseFloat(String(v1)), raw2 = parseFloat(String(v2)), raw3 = parseFloat(String(v3));
+    const maxV = Math.max(raw1, raw2, raw3);
+    r1 = raw1 === maxV ? 'hs2' : '';
+    r2 = raw2 === maxV ? 'hs2' : '';
+    r3 = raw3 === maxV ? 'hs2' : '';
+  } else {
+    const raw1 = parseFloat(String(v1)), raw2 = parseFloat(String(v2)), raw3 = parseFloat(String(v3));
+    const maxV = Math.max(raw1, raw2, raw3);
+    r1 = raw1 === maxV ? 'hs2' : '';
+    r2 = raw2 === maxV ? 'hs2' : '';
+    r3 = raw3 === maxV ? 'hs2' : '';
+  }
+  return `<tr>
+    <td class="rlabel">${label}</td>
+    <td class="${r1}">${v1}</td>
+    <td class="${r2}">${v2}</td>
+    <td class="${r3}">${v3}</td>
+  </tr>`;
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+function initChart(sym) {
+  const ctx = document.getElementById('chart-'+sym).getContext('2d');
+  const ts  = TS_DATA[sym];
+  chartModes[sym] = 'val';
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels: ts.map(r => r.date),
+      datasets: [
+        { label:'经典 AHR999', data:ts.map(r=>r.val1),
+           borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.04)',
+           borderWidth:1.5, pointRadius:0, tension:.3, fill:false },
+        { label:'AHR999 优化版', data:ts.map(r=>r.val2),
+           borderColor:'#22d3ee', backgroundColor:'rgba(34,211,238,.05)',
+           borderWidth:2, pointRadius:0, tension:.3, fill:false },
+        { label:'无脑定投', data:ts.map(r=>r.val3),
+           borderColor:'#6b7280', backgroundColor:'rgba(107,114,128,.04)',
+           borderWidth:1.5, pointRadius:0, tension:.3, fill:false, borderDash:[4,3] },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:500},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1f2e', borderColor:'#2d3748', borderWidth:1,
+          titleColor:'#94a3b8', bodyColor:'#e2e8f0',
+          titleFont:{family:"'IBM Plex Mono'",size:10},
+          bodyFont:{family:"'IBM Plex Mono'",size:11},
+          padding:10,
+          callbacks:{
+            label:(ctx) => {
+              const v = ctx.raw;
+              const m = chartModes[sym];
+              return ` ${ctx.dataset.label}: ${m==='val'?'$':''}${v>=1000?(v/1000).toFixed(1)+'K':v.toFixed(0)}${m==='pnl'?'%':''}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:9},maxTicksLimit:12,maxRotation:0} },
+        y:{ grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:9},
+          callback:(v) => chartModes[sym]==='val'?(v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+v):v+'%'
+        } }
+      }
+    }
+  };
+  charts[sym] = new Chart(ctx, cfg);
+}
+
+function toggleChart(sym, mode, btn) {
+  chartModes[sym] = mode;
+  const ts = TS_DATA[sym];
+  const ch = charts[sym];
+  const sub = document.getElementById('csub-'+sym);
+  btn.closest('.tog').querySelectorAll('.tbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (mode === 'val') {
+    sub.textContent = '持仓市值走势（USDT）';
+    ch.data.datasets[0].data = ts.map(r=>r.val1);
+    ch.data.datasets[1].data = ts.map(r=>r.val2);
+    ch.data.datasets[2].data = ts.map(r=>r.val3);
+  } else {
+    sub.textContent = '收益率 %（相对累计投入）';
+    ch.data.datasets[0].data = ts.map(r=>r.pnl1);
+    ch.data.datasets[1].data = ts.map(r=>r.pnl2);
+    ch.data.datasets[2].data = ts.map(r=>r.pnl3);
+  }
+  ch.update();
+}
+
+function switchCoin(sym, tab) {
+  currentCoin = sym;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.querySelectorAll('.coin-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+sym).classList.add('active');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const main = document.getElementById('main-content');
+  ['BTC','ETH','SOL'].forEach(c => main.insertAdjacentHTML('beforeend', buildPanel(c)));
+  setTimeout(() => ['BTC','ETH','SOL'].forEach(c => initChart(c)), 100);
+});
+</script>
+</body>
+</html>
