@@ -1,0 +1,83 @@
+# Kenne Index 定投信号通知
+# 默认：周日 22:00 UTC = 周一 06:00 CST 自动运行（错开 GitHub 高峰期）
+# 每次运行后自动将更新的 CSV 和 model_params.json 提交回仓库
+
+name: Kenne Index Auto Invest
+
+on:
+  schedule:
+    - cron: '0 22 * * 0'   # 周日 22:00 UTC = 周一 06:00 CST
+  workflow_dispatch:         # 支持手动触发：Actions → Run workflow
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install pandas numpy scipy requests ccxt
+
+      - name: Run signal & notify
+        env:
+          # ── 交易所 API（仅自动交易时必填，--notify 模式可留空）
+          OKX_API_KEY:        ${{ secrets.OKX_API_KEY }}
+          OKX_API_SECRET:     ${{ secrets.OKX_API_SECRET }}
+          OKX_API_PASSPHRASE: ${{ secrets.OKX_API_PASSPHRASE }}
+
+          # ── 邮件通知（必填）
+          SMTP_HOST:     ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:     ${{ secrets.SMTP_PORT }}
+          SMTP_USER:     ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO:      ${{ secrets.EMAIL_TO }}
+
+          # ── 定投策略（按需修改）
+          # BUDGET_MODE:
+          #   MONTHLY = 月度预算自动均摊，推荐新手
+          #   FIXED   = 每次执行固定金额，无月度上限
+          BUDGET_MODE: MONTHLY
+
+          # BUDGET_AMOUNT:
+          #   MONTHLY 模式 = 每月总上限（USDT）
+          #   FIXED   模式 = 每次固定金额（USDT）
+          BUDGET_AMOUNT: '700'
+
+          # RUN_INTERVAL_DAYS：执行间隔天数，必须与上方 cron 周期一致
+          #   每周填 7（对应 cron: '0 22 * * 0'）
+          #   每天填 1（对应 cron: '0 1 * * *'）
+          #   每月填 30（对应 cron: '0 1 1 * *'）
+          RUN_INTERVAL_DAYS: '7'
+
+          # SIMULATED:
+          #   true  = 模拟盘，不产生真实订单（推荐先用此模式测试）
+          #   false = 真实交易，会花费真实资金
+          SIMULATED: 'true'
+
+        # 修改运行命令：
+        #   --notify    仅发送信号邮件，不交易（当前默认）
+        #   （无参数）  自动下单，需将 SIMULATED 改为 false 并配置 API Key
+        run: python kenne_dca.py --notify
+
+      - name: Commit updated data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add *.csv
+          [ -f model_params.json ] && git add model_params.json || true
+          git diff --cached --quiet || git commit -m "chore: update market data $(date -u +'%Y-%m-%d')"
+          git push
