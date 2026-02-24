@@ -1,13 +1,13 @@
 """
-AHR999 x OKX 自动定投
+Kenne Index x OKX 自动定投
 用法:
-  python3 ahr999_dca.py --update           # 仅补全 K 线数据
-  python3 ahr999_dca.py --notify           # 发送信号邮件（不交易）
-  python3 ahr999_dca.py --dry-run          # 模拟完整流程（不下单）
-  python3 ahr999_dca.py                    # 补数据 + 真实下单
-  python3 ahr999_dca.py --daemon           # 守护进程，按 RUN_INTERVAL_DAYS 间隔执行
-  python3 ahr999_dca.py --notify-daemon    # 守护进程，仅发邮件不交易
-  python3 ahr999_dca.py --history [YYYY-MM]
+  python3 kenne_dca.py --update           # 仅补全 K 线数据
+  python3 kenne_dca.py --notify           # 发送信号邮件（不交易）
+  python3 kenne_dca.py --dry-run          # 模拟完整流程（不下单）
+  python3 kenne_dca.py                    # 补数据 + 真实下单
+  python3 kenne_dca.py --daemon           # 守护进程，按 RUN_INTERVAL_DAYS 间隔执行
+  python3 kenne_dca.py --notify-daemon    # 守护进程，仅发邮件不交易
+  python3 kenne_dca.py --history [YYYY-MM]
 
 环境变量（敏感信息）:
   OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE
@@ -21,7 +21,7 @@ AHR999 x OKX 自动定投
 
 USD vs USDT:
   历史 CSV 为 Binance USD 数据，OKX 返回 USDT。
-  AHR999 是纯比率指标，USDT/USD 偏差 < 0.1%，直接拼接无需换算。
+  Kenne Index 是纯比率指标，USDT/USD 偏差 < 0.1%，直接拼接无需换算。
 """
 
 import os, sys, json, hmac, base64, hashlib, time, logging, argparse
@@ -34,7 +34,7 @@ from typing import Optional
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from ahr999 import analyze as ahr999_analyze
+from kenne_index import analyze as kenne_analyze
 
 
 # ─── 配置 ─────────────────────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ class Record:
     symbol:   str
     inst_id:  str
     usdt:     float
-    ahr999:   float
+    kenne_index: float
     mult:     float
     momentum: str
     order_id: str
@@ -486,7 +486,7 @@ def run_update():
 
 
 def run_dca(dry_run=False):
-    log.info(f'--- AHR999 DCA {"[dry-run]" if dry_run else "[live]"} ---')
+    log.info(f'--- Kenne Index DCA {"[dry-run]" if dry_run else "[live]"} ---')
 
     client  = _make_client()
     updater = DataUpdater(client)
@@ -515,10 +515,10 @@ def run_dca(dry_run=False):
     signals = []
     for sym, f in CFG['DATA_FILES'].items():
         try:
-            r = ahr999_analyze(f, sym)
+            r = kenne_analyze(f, sym)
             if r:
                 signals.append(r)
-                log.info(f'  {sym}: ahr999={r["ahr999"]:.4f}  '
+                log.info(f'  {sym}: kenne={r["kenne_index"]:.4f}  '
                          f'momentum={r["momentum"]}  mult={r["final_mult"]:.2f}x')
         except Exception as e:
             log.error(f'[{sym}] analysis failed: {e}')
@@ -562,13 +562,13 @@ def run_dca(dry_run=False):
 
         if usdt < CFG['MIN_ORDER_USDT']:
             log.info(f'  {sym}: ${usdt:.2f} below minimum, skip')
-            budget.add(Record(ts, sym, inst_id, usdt, a['ahr999'],
+            budget.add(Record(ts, sym, inst_id, usdt, a['kenne_index'],
                               a['final_mult'], a['momentum'], '', 'skipped', 'below minimum'))
             continue
 
         if dry_run:
             log.info(f'  {sym}: [dry-run] would buy ${usdt:.2f} USDT')
-            budget.add(Record(ts, sym, inst_id, usdt, a['ahr999'],
+            budget.add(Record(ts, sym, inst_id, usdt, a['kenne_index'],
                               a['final_mult'], a['momentum'], 'DRY_RUN', 'dry_run'))
             continue
 
@@ -577,16 +577,16 @@ def run_dca(dry_run=False):
             if resp.get('code') == '0':
                 oid = resp['data'][0]['ordId']
                 log.info(f'  {sym}: filled  order={oid}  ${usdt:.2f} USDT')
-                budget.add(Record(ts, sym, inst_id, usdt, a['ahr999'],
+                budget.add(Record(ts, sym, inst_id, usdt, a['kenne_index'],
                                   a['final_mult'], a['momentum'], oid, 'filled'))
             else:
                 err = resp.get('data', [{}])[0].get('sMsg', str(resp))
                 log.error(f'  {sym}: order failed: {err}')
-                budget.add(Record(ts, sym, inst_id, usdt, a['ahr999'],
+                budget.add(Record(ts, sym, inst_id, usdt, a['kenne_index'],
                                   a['final_mult'], a['momentum'], '', 'failed', err))
         except Exception as e:
             log.error(f'  {sym}: exception: {e}')
-            budget.add(Record(ts, sym, inst_id, usdt, a['ahr999'],
+            budget.add(Record(ts, sym, inst_id, usdt, a['kenne_index'],
                               a['final_mult'], a['momentum'], '', 'failed', str(e)))
         time.sleep(0.3)
 
@@ -636,7 +636,7 @@ def show_history(month=None):
 
     status_map = {'filled': 'OK', 'dry_run': 'DRY', 'failed': 'ERR', 'skipped': 'SKP'}
     total = 0.0
-    print(f'\n{"date":<20} {"sym":<4} {"usdt":>8} {"ahr999":>8} {"mult":>6} status')
+    print(f'\n{"date":<20} {"sym":<4} {"usdt":>8} {"kenne":>8} {"mult":>6} status')
     print('-' * 58)
     for r in recs:
         u  = r.get('usdt', 0)
@@ -644,7 +644,7 @@ def show_history(month=None):
             total += u
         st = status_map.get(r['status'], '???')
         print(f'  {r.get("ts",""):<18} {r["symbol"]:<4} '
-              f'{u:>8.2f} {r.get("ahr999",0):>8.4f} '
+              f'{u:>8.2f} {r.get("kenne_index",0):>8.4f} '
               f'{r.get("mult",0):>5.2f}x  {st}')
     print(f'{"-"*58}\n  total: ${total:.2f}')
 
@@ -688,7 +688,7 @@ def _build_report(signals, allocs, budget):
         budget_desc = f'${budget.amount:.0f}/月  {interval_label}'
 
     lines = [
-        f'AHR999 定投信号  {date}',
+        f'Kenne Index 定投信号  {date}',
         f'策略: {budget_desc}',
         '=' * 46,
         '',
@@ -697,14 +697,14 @@ def _build_report(signals, allocs, budget):
     ]
 
     for s in signals:
-        ahr = s['ahr999']
+        ahr = s['kenne_index']
         prc = s.get('price', 0)
         if   ahr < 0.45:            zone = '极低估'
         elif s['base_mult'] > 0:    zone = '定投区'
         else:                       zone = '观望区'
         lines.append(
             f"  {s['symbol']:<4}  价格 {prc:>10,.2f} USDT  "
-            f"AHR999 {ahr:.4f}  {zone}  {s['momentum']}  建议 {s['final_mult']:.2f}x"
+            f"Kenne {ahr:.4f}  {zone}  {s['momentum']}  建议 {s['final_mult']:.2f}x"
         )
 
     # 本次分配
@@ -734,14 +734,14 @@ def _build_report(signals, allocs, budget):
     lines += [
         '',
         '-' * 46,
-        '本邮件由 AHR999 定投系统自动生成，仅供参考，不构成投资建议',
+        '本邮件由 Kenne Index 定投系统自动生成，仅供参考，不构成投资建议',
     ]
     return '\n'.join(lines)
 
 
 def run_notify():
     """更新数据 -> 计算信号 -> 发送邮件。不执行任何交易。"""
-    log.info('--- AHR999 notify ---')
+    log.info('--- Kenne Index notify ---')
 
     client  = _make_client()
     updater = DataUpdater(client)
@@ -758,10 +758,10 @@ def run_notify():
     signals = []
     for sym, f in CFG['DATA_FILES'].items():
         try:
-            r = ahr999_analyze(f, sym)
+            r = kenne_analyze(f, sym)
             if r:
                 signals.append(r)
-                log.info(f'  {sym}: ahr999={r["ahr999"]:.4f}  '
+                log.info(f'  {sym}: kenne={r["kenne_index"]:.4f}  '
                          f'momentum={r["momentum"]}  mult={r["final_mult"]:.2f}x')
         except Exception as e:
             log.error(f'[{sym}] analysis failed: {e}')
@@ -774,7 +774,7 @@ def run_notify():
 
     log.info('[3/3] sending email')
     log.info(budget.summary_str())
-    subject = f'AHR999 定投信号 {datetime.date.today().strftime("%Y-%m-%d")}'
+    subject = f'Kenne Index 定投信号 {datetime.date.today().strftime("%Y-%m-%d")}'
     _send_email(subject, _build_report(signals, allocs, budget))
     log.info('--- done ---')
 
@@ -797,7 +797,7 @@ def run_notify_daemon():
 # ─── 入口 ─────────────────────────────────────────────────────────────────────
 
 def main():
-    p = argparse.ArgumentParser(description='AHR999 x OKX auto DCA')
+    p = argparse.ArgumentParser(description='Kenne Index x OKX auto DCA')
     p.add_argument('--update',        action='store_true', help='update CSV data only')
     p.add_argument('--notify',        action='store_true', help='send signal email (no trade)')
     p.add_argument('--dry-run',       action='store_true', help='simulate without ordering')
